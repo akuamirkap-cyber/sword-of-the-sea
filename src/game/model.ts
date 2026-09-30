@@ -247,58 +247,6 @@ function limbGeo(L: number, rTop: number, rMid: number, rEnd: number, midAt = 0.
   return g;
 }
 
-/**
- * Pita kain yang DILILIT helix di sekeliling leher — dipakai kerah slayer.
- * Menghasilkan permukaan luar + dalam + tutup ujung, jadi terlihat sebagai
- * lilitan kain bervolume dari sudut mana pun.
- */
-function helixRibbonGeo(o: {
-  turns: number;
-  y0: number;
-  y1: number;
-  r0: number;
-  r1: number;
-  width: number;
-  thick: number;
-  start: number;
-  wobble?: number;
-  segs?: number;
-}): THREE.BufferGeometry {
-  const N = o.segs ?? 76;
-  const w = o.width / 2;
-  const pos: number[] = [];
-  const idx: number[] = [];
-  const ring = (t: number, side: number): [number, number, number] => {
-    const th = o.start + t * o.turns * Math.PI * 2;
-    const r =
-      o.r0 + (o.r1 - o.r0) * t + (o.wobble ?? 0) * Math.sin(th * 3 + t * 5) + side * o.thick * 0.5;
-    return [Math.sin(th) * r, o.y0 + (o.y1 - o.y0) * t, Math.cos(th) * r];
-  };
-  for (const side of [1, -1]) {
-    const base = pos.length / 3;
-    for (let i = 0; i <= N; i++) {
-      const [x, y, z] = ring(i / N, side);
-      pos.push(x, y - w, z, x, y + w, z);
-    }
-    for (let i = 0; i < N; i++) {
-      const a = base + i * 2;
-      idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
-    }
-  }
-  for (const tEnd of [0, 1]) {
-    const base = pos.length / 3;
-    const [xo, yo, zo] = ring(tEnd, 1);
-    const [xi, yi, zi] = ring(tEnd, -1);
-    pos.push(xo, yo - w, zo, xo, yo + w, zo, xi, yi - w, zi, xi, yi + w, zi);
-    idx.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setIndex(idx);
-  g.computeVertexNormals();
-  return g;
-}
-
 function headGeo(): THREE.BufferGeometry {
   // KEPALA MANUSIA (bukan bola): tengkorak lonjong — lebih tinggi & lebih
   // dalam dari lebar, rahang menyempit ke dagu, dagu maju, wajah agak rata.
@@ -499,8 +447,9 @@ export function buildRider(): Rider {
   );
   const head = mk(headGeo());
 
-  // ---- KERAH SLAYER: kain BENAR-BENAR DILILIT di leher — dua lilitan
-  // helix berlapis yang menumpuk & menyilang (kaya orang memakai syal).
+  // ---- KERAH SLAYER: kain tebal yang MEMBELIT leher — dua lilitan
+  // menyilang & menumpuk (torus miring) + ujung kain ditusukkan di depan.
+  // Rapat di leher tanpa celah, terbaca sebagai syal dari sudut mana pun.
   // Anak neckMesh → mengikuti lekuk leher, swing superman & skala pup.
   const scarfCollar = (() => {
     const g = new THREE.Group();
@@ -512,29 +461,32 @@ export function buildRider(): Rider {
       emissive: new THREE.Color(0x1c0604),
       emissiveIntensity: 0.35,
     });
-    // lilitan utama: 1,8 putaran menurun — kain melingkar rapat di leher
-    const coil1 = new THREE.Mesh(
-      helixRibbonGeo({ turns: 1.8, y0: 0.054, y1: 0.004, r0: 0.0665, r1: 0.0705, width: 0.058, thick: 0.013, start: 0.35, wobble: 0.0035 }),
-      bandMat,
-    );
-    // lilitan kedua fase beda: menyilang menumpuk → ujung kain tampak
-    // ditusukkan ke bawah lilitan pertama
-    const coil2 = new THREE.Mesh(
-      helixRibbonGeo({ turns: 1.15, y0: 0.058, y1: 0.018, r0: 0.0725, r1: 0.0685, width: 0.05, thick: 0.011, start: 2.7, wobble: 0.003 }),
-      bandMat,
-    );
-    // trim emas di bibir atas & bawah lilitan (mode sulaman journey)
-    const trimGeo = new THREE.TorusGeometry(0.074, 0.0036, 8, 36);
+    // lilitan kain: torus tabung tebal, dimiringkan agar dua lilitan
+    // tampak menyilang menumpuk (bukan cincin sejajar yang kaku)
+    const mkCoil = (r: number, tube: number, rz: number, rx: number, y: number) => {
+      const m = new THREE.Mesh(new THREE.TorusGeometry(r, tube, 14, 44), bandMat);
+      m.rotation.set(Math.PI / 2 + rx, 0, rz);
+      m.position.y = y;
+      return m;
+    };
+    const coil1 = mkCoil(0.0645, 0.0225, 0.2, 0.06, 0.008); // lilitan bawah
+    const coil2 = mkCoil(0.066, 0.02, -0.24, -0.05, 0.034); // lilitan atas, silang
+    // ujung kain ditusukkan: lidah kain diagonal menimpa lilitan di depan
+    const flap = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.016, 0.088), bandMat);
+    flap.position.set(0.014, 0.018, 0.058);
+    flap.rotation.set(0.2, -0.4, 0.55);
+    // trim emas mengelilingi bibir atas & bawah lilitan (mode sulaman)
+    const trimGeo = new THREE.TorusGeometry(0.0625, 0.0034, 8, 40);
     const trimT = new THREE.Mesh(trimGeo, gold);
     const trimB = new THREE.Mesh(trimGeo, gold);
     trimT.rotation.x = Math.PI / 2;
     trimB.rotation.x = Math.PI / 2;
-    trimT.position.y = 0.05;
-    trimB.position.y = -0.026;
+    trimT.position.y = 0.058;
+    trimB.position.y = -0.016;
     trimT.visible = false;
     trimB.visible = false;
-    g.add(coil1, coil2, trimT, trimB);
-    g.position.y = 0.046;
+    g.add(coil1, coil2, flap, trimT, trimB);
+    g.position.y = 0.05;
     g.visible = false;
     neckMesh.add(g);
     return { group: g, bandMat, trimT, trimB };

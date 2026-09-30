@@ -1892,9 +1892,10 @@ export class Game {
     this.scarfBack.set(-fx, 0, -fz);
     this.scarfLat.set(fz, 0, -fx);
     this.rider.neck.getWorldPosition(this.scarfAnchor);
-    // ekor panjang keluar dari bibir belakang LILITAN kerah (bukan dasar leher)
-    this.scarfAnchor.y += 0.07;
-    this.scarfAnchor.addScaledVector(this.scarfBack, 0.066);
+    // ekor panjang keluar dari BAWAH lilitan belakang: sedikit di dalam
+    // permukaan torus (luar ≈ 0,087 m) → akar pita melebur dari balik kain
+    this.scarfAnchor.y += 0.036;
+    this.scarfAnchor.addScaledVector(this.scarfBack, 0.078);
     const speed = Math.hypot(this.vel.x, this.vel.z);
     const opts = { length: T.scarfLength, width: T.scarfWidth, flutter: T.scarfFlutter };
 
@@ -1911,15 +1912,15 @@ export class Game {
       }, this.vel);
     }
 
-    // ---- UJUNG PENDEK SYAL di depan dada: syal sungguhan punya dua ujung —
-    // satu panjang berkibar ke belakang, satu pendek terurai di dada, keluar
-    // dari bawah lilitan kerah. Fisika verlet sama (tertiup angin sembunyi).
-    this.t1.copy(this.scarfAnchor).addScaledVector(this.scarfBack, -0.13);
-    this.t1.y -= 0.02;
+    // ---- UJUNG PENDEK SYAL di depan dada: keluar dari bawah lilitan depan
+    // (lidah kain tertekan ke dada saat ngebut, berkibar saat pelan).
+    this.rider.neck.getWorldPosition(this.t1);
+    this.t1.y += 0.02;
+    this.t1.addScaledVector(this.scarfBack, -0.072); // permukaan depan lilitan
     this.t2.set(-this.scarfBack.x * 0.6, -1, -this.scarfBack.z * 0.6).normalize();
     this.scarfFront.update(dt, this.t1, this.t2, speed, this.time, {
-      length: 0.36 + T.scarfLength * 0.07,
-      width: 0.05 + T.scarfWidth * 0.75,
+      length: 0.3 + T.scarfLength * 0.05,
+      width: 0.046 + T.scarfWidth * 0.7,
       flutter: 0.75,
     }, this.vel);
 
