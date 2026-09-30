@@ -286,8 +286,8 @@ export const DEFAULT_TUNE: Tune = {
   crystalC: '#8c80ff',
   accentMetal: 0,
   swordSkin: 0, // DEFAULT = Silver Surfer (papan krom reflektif)
-  bodyHeight: 0.5, // Mode Cebol (chibi kepala besar) aktif secara default
-  headSize: 1.7,
+  bodyHeight: 1, // proporsi dewasa ala Silver Surfer (chibi masih ada di preset)
+  headSize: 1,
   swordSize: 0.68,
   swordGlow: 0.18, // pencahayaan pedang teredam 70% (sejuk & proporsional)
 

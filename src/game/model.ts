@@ -237,8 +237,8 @@ function limbGeo(L: number, rTop: number, rMid: number, rEnd: number, midAt = 0.
     ],
     24,
     6,
-    0.9,
-    0.9,
+    0.6,
+    0.6,
     5,
   );
   g.rotateX(Math.PI);
@@ -246,15 +246,24 @@ function limbGeo(L: number, rTop: number, rMid: number, rEnd: number, midAt = 0.
 }
 
 function headGeo(): THREE.BufferGeometry {
+  // KEPALA MANUSIA (bukan bola): tengkorak lonjong — lebih tinggi & lebih
+  // dalam dari lebar, rahang menyempit ke dagu, dagu maju, wajah agak rata.
   const g = new THREE.SphereGeometry(0.1, 56, 40);
   const p = g.attributes.position;
   for (let i = 0; i < p.count; i++) {
-    const x = p.getX(i);
+    let x = p.getX(i);
     const y = p.getY(i);
-    const z = p.getZ(i);
-    const t = Math.min(1, Math.max(0, (-y - 0.035) / 0.065));
-    const s = 1 - 0.13 * t * t * (3 - 2 * t);
-    p.setXYZ(i, x * s, y, z * s + 0.012 * t * (z > 0 ? 1 : 0));
+    let z = p.getZ(i);
+    // 0 di tengah kepala → 1 di dagu
+    const t = Math.min(1, Math.max(0, (-y - 0.005) / 0.095));
+    const jaw = 1 - 0.4 * t * t;              // rahang menyempit ke bawah
+    x *= jaw;
+    z = z * (1 - 0.16 * t * t) + 0.014 * t * t; // dagu maju sedikit
+    // proporsi tengkorak: sempit di sisi, tinggi, dalam (z > x)
+    x *= 0.8;
+    z *= 0.94;
+    if (z > 0.02) z *= 0.95; // bidang wajah agak rata
+    p.setXYZ(i, x, y * 1.06, z);
   }
   g.computeVertexNormals();
   return g;
@@ -371,8 +380,8 @@ export function buildRider(): Rider {
       [
         { y: -0.1, w: 0.1, d: 0.075 },
         { y: -0.05, w: 0.14, d: 0.1 },
-        { y: 0.02, w: 0.15, d: 0.105 },
-        { y: 0.08, w: 0.135, d: 0.095 },
+        { y: 0.02, w: 0.148, d: 0.102 },
+        { y: 0.09, w: 0.122, d: 0.088 }, // nyambung ke pinggang torso
       ],
       32,
       6,
@@ -384,13 +393,13 @@ export function buildRider(): Rider {
     loft(
       [
         { y: 0.0, w: 0.118, d: 0.085 },
-        { y: 0.08, w: 0.114, d: 0.084, z: 0.004 },
-        { y: 0.18, w: 0.135, d: 0.098, z: 0.012 },
-        { y: 0.28, w: 0.155, d: 0.108, z: 0.018 },
-        { y: 0.36, w: 0.168, d: 0.1, z: 0.012 },
-        { y: 0.42, w: 0.162, d: 0.085, z: 0.0 },
-        { y: 0.46, w: 0.12, d: 0.07 },
-        { y: 0.49, w: 0.062, d: 0.055 },
+        { y: 0.08, w: 0.116, d: 0.086, z: 0.004 },
+        { y: 0.18, w: 0.14, d: 0.1, z: 0.012 },
+        { y: 0.28, w: 0.162, d: 0.11, z: 0.018 },  // dada lebar
+        { y: 0.36, w: 0.172, d: 0.102, z: 0.012 },
+        { y: 0.43, w: 0.15, d: 0.088, z: 0.006 },  // bahu
+        { y: 0.475, w: 0.1, d: 0.072, z: 0.0 },    // trapezius
+        { y: 0.52, w: 0.06, d: 0.056 },            // pangkal leher (menyatu)
       ],
       36,
       6,
@@ -401,9 +410,9 @@ export function buildRider(): Rider {
   const neckMesh = mk(
     loft(
       [
-        { y: 0, w: 0.048, d: 0.046 },
-        { y: 0.06, w: 0.042, d: 0.042 },
-        { y: 0.12, w: 0.044, d: 0.044 },
+        { y: 0, w: 0.06, d: 0.056 },   // pangkal lebar — melebur ke trapezius
+        { y: 0.06, w: 0.043, d: 0.042 },
+        { y: 0.12, w: 0.052, d: 0.05 }, // melebar lagi mendekati tengkorak
       ],
       24,
       5,
@@ -413,7 +422,7 @@ export function buildRider(): Rider {
   );
   const head = mk(headGeo());
   const deltGeo = new THREE.SphereGeometry(0.056, 28, 20);
-  deltGeo.scale(1.05, 0.95, 0.95);
+  deltGeo.scale(1.02, 0.86, 0.98); // otot bahu pipih, menyatu dada
   const deltL = mk(deltGeo);
   const deltR = mk(deltGeo);
 
@@ -470,7 +479,6 @@ export function buildRider(): Rider {
   footGeo.translate(0, -0.055, 0);
   const footL = mk(footGeo);
   const footR = mk(footGeo);
-  const belt = mk(new THREE.TorusGeometry(1, 0.1, 10, 72), gold);
 
   // scarf anchor rides with the body (incl. superman)
   const neck = new THREE.Object3D();
@@ -602,9 +610,6 @@ export function buildRider(): Rider {
     const FAk = FA * armK;
     const reach = (UAk + FAk) * 0.94;
 
-    // ---- aksesori & fitur fade sesuai bentuk (pup = tanpa pakaian)
-    const showOutfit = pup < 0.5;
-    belt.visible = showOutfit;
     // wajah ferret: mata mengecil, telinga mengecil ke sisi, moncong tumbuh
     eyes.visible = pup > 0.02;
     eyes.scale.setScalar(1 - 0.34 * pup);
@@ -700,9 +705,6 @@ export function buildRider(): Rider {
     lb(qSpine, v, 0, 0.36 * torsoK, 0.012, chestP);
     lb(qSpine, v, 0, 0.47 * torsoK, 0, neckBase);
 
-    lb(qBody, pelvisP, 0, 0.075 * torsoK, 0, belt.position);
-    belt.quaternion.copy(qBody).multiply(tmpQ.setFromAxisAngle(xAxis, Math.PI / 2));
-    belt.scale.set(0.126, 0.092, 0.12);
 
     // ---------------- neck & head
     neckMesh.position.copy(neckBase);

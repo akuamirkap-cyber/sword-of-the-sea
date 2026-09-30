@@ -19,9 +19,9 @@ import { BOARD_TRICKS, GRABS } from '../game/tricks';
 import { WATER_PALETTES } from '../game/river';
 
 const BODY_PRESETS = [
-  { name: 'Cebol', desc: 'chibi kepala besar (default)', v: { bodyHeight: 0.5, headSize: 1.7 } },
+  { name: 'Cebol', desc: 'chibi kepala besar', v: { bodyHeight: 0.5, headSize: 1.7 } },
   { name: 'Pendek', desc: 'mungil & lincah', v: { bodyHeight: 0.78, headSize: 1.12 } },
-  { name: 'Normal', desc: 'proporsi dewasa', v: { bodyHeight: 1, headSize: 1 } },
+  { name: 'Normal', desc: 'proporsi dewasa (default) ala Silver Surfer', v: { bodyHeight: 1, headSize: 1 } },
 ];
 
 type Tab = 'feel' | 'air' | 'book' | 'bloom' | 'light' | 'fog' | 'world' | 'water' | 'sky' | 'scarf' | 'grade' | 'cam' | 'fx';
