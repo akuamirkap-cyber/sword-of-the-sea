@@ -201,7 +201,7 @@ export interface Tune {
 export const DEFAULT_TUNE: Tune = {
   palette: 5, // Twilight (Langit Twilight)
   cycle: false,
-  haze: 0.42,
+  haze: 0.3,
 
   sunAz: 0,
   sunEl: 0,
@@ -333,12 +333,13 @@ export const DEFAULT_TUNE: Tune = {
   waterCurrent: 1,
 
   // clear distance visibility: no blinding white haze
-  fogStart: 150,
-  fogHeight: 0.06,
-  fogLayer: 22,
-  fogScatter: 0.25,
-  fogMax: 0.85,
-  fogSky: 0.1,
+  // PANORAMA: kabut tipis — pemandangan jauh & pegunungan siluet terlihat jelas
+  fogStart: 340,
+  fogHeight: 0.04,
+  fogLayer: 30,
+  fogScatter: 0.22,
+  fogMax: 0.5,
+  fogSky: 0.06,
   fogCustom: false,
 
   jumpPower: 1,
@@ -378,9 +379,14 @@ export const DEFAULT_TUNE: Tune = {
 /** Fog presets. */
 export const FOG_PRESETS: FeelPreset[] = [
   {
-    name: 'Jernih (Default)',
-    desc: 'paling jernih, jarak pandang luas & bebas silau',
-    values: { haze: 0.42, fogStart: 150, fogHeight: 0.06, fogLayer: 22, fogScatter: 0.25, fogMax: 0.85, fogSky: 0.1 },
+    name: 'Panorama ✦',
+    desc: 'DEFAULT: kabut tipis — pegunungan jauh & vista terbuka jernih',
+    values: { haze: 0.3, fogStart: 340, fogHeight: 0.04, fogLayer: 30, fogScatter: 0.22, fogMax: 0.5, fogSky: 0.06 },
+  },
+  {
+    name: 'Super Jernih',
+    desc: 'udara bening total — siluet gunung setajam mungkin',
+    values: { haze: 0.18, fogStart: 520, fogHeight: 0.02, fogLayer: 36, fogScatter: 0.15, fogMax: 0.3, fogSky: 0.03 },
   },
   {
     name: 'Ekstra Jernih',
