@@ -100,6 +100,7 @@ export interface Tune {
   crystalCustom: boolean;
   crystalC: string;
   accentMetal: number; // index into ACCENT_METALS
+  swordSkin: number; // index into SWORD_SKINS (0 = Silver Surfer krom, default)
   bodyHeight: number; // 1 = normal, ~0.78 = short, ~0.5 = chibi
   headSize: number;
   swordSize: number;
@@ -228,7 +229,7 @@ export const DEFAULT_TUNE: Tune = {
   turn: 1,
   speed: 1,
 
-  camStyle: 1, // DEFAULT = Sekiro (third-person + lock-on) — tekan 1/2/3/4 untuk ganti
+  camStyle: 3, // DEFAULT = Bodycam — tekan 1/2/3/4 untuk ganti
   worldMode: 0, // DEFAULT = Petualangan (biome berganti mulus sepanjang perjalanan)
   camDist: 1,
   camLag: 1.15,
@@ -236,7 +237,8 @@ export const DEFAULT_TUNE: Tune = {
   shake: 0.35,
 
   // default per mode: Klasik & SotS ≈ framing asli · Sekiro 2° = third-person
-  // level (bukan top-down) · Bodycam 6° = menunduk sedikit ke lintasan turun
+  // level (bukan top-down) · Bodycam default ×2.0 · 30° (menunduk ke lintasan,
+  // bisa diatur sampai 90° = top-down penuh)
   cam0Dist: 1,
   cam0Pitch: 17,
   cam0Yaw: 40,
@@ -246,8 +248,8 @@ export const DEFAULT_TUNE: Tune = {
   cam2Dist: 1,
   cam2Pitch: 9,
   cam2Yaw: 0,
-  cam3Dist: 1,
-  cam3Pitch: 6,
+  cam3Dist: 2,
+  cam3Pitch: 30,
   cam3Yaw: 0,
 
   particles: 1,
@@ -263,7 +265,7 @@ export const DEFAULT_TUNE: Tune = {
   scarfWidth: 0.16,
   scarfFlutter: 0.8,
   scarfColor: 0,
-  scarfTwin: true,
+  scarfTwin: false, // DEFAULT = satu ujung (twin tail bisa diaktifkan di Settings)
   scarfGlow: false,
   scarfSkin: 1,
   scarfEthereal: 0,
@@ -272,6 +274,7 @@ export const DEFAULT_TUNE: Tune = {
   crystalCustom: false,
   crystalC: '#8c80ff',
   accentMetal: 0,
+  swordSkin: 0, // DEFAULT = Silver Surfer (papan krom reflektif)
   bodyHeight: 0.5, // Mode Cebol (chibi kepala besar) aktif secara default
   headSize: 1.7,
   swordSize: 0.68,
@@ -633,9 +636,19 @@ export const CAM_PRESETS: FeelPreset[] = [
   },
   {
     name: 'Bodycam ●',
-    desc: 'terpasang di dada: dekat, FOV lebar, goyangan handheld — drag = toleh',
+    desc: 'DEFAULT: di dada — jarak ×2.0 · 30° menunduk, FOV lebar, handheld',
     values: { camStyle: 3, camDist: 1, camLag: 1.6, fov: 0.8, shake: 0.55 },
   },
+];
+
+/**
+ * Skin pedang-skate. 0 = Silver Surfer: krom murni reflektif seperti papan
+ * si Silver Surfer (default). 1 = Baja Asli: pedang biru-baja dengan gagang
+ * emas seperti release pertama.
+ */
+export const SWORD_SKINS: { name: string; desc: string }[] = [
+  { name: 'Silver Surfer', desc: 'krom murni — papan reflektif ala Silver Surfer' },
+  { name: 'Baja Asli', desc: 'bilah baja kebiruan + gagang emas (klasik)' },
 ];
 
 /** World/biome mode presets — ganti kapan saja, medan langsung terbangun ulang. */

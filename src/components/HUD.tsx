@@ -221,6 +221,25 @@ export function Hud({
             <span className="tnum text-[10px] text-sand-100/80">{fmt(stats.navDist)} m</span>
           </div>
         )}
+        {/* sinar putih — tujuan utama */}
+        {stats.beamOn && (
+          <div
+            className="glass mt-2 flex items-center gap-2 rounded-full px-3 py-[5px]"
+            style={{ borderColor: 'rgba(255,255,255,0.6)', boxShadow: '0 0 18px rgba(255,255,255,0.25)' }}
+          >
+            <svg
+              viewBox="0 0 20 20"
+              className="h-4 w-4 transition-transform duration-150"
+              style={{ transform: `rotate(${(stats.beamBearing * 180) / Math.PI}deg)` }}
+            >
+              <path d="M10 1.5 L16 16 L10 12.5 L4 16 Z" fill="#ffffff" />
+            </svg>
+            <span className="anim-breathe text-[9px] font-semibold tracking-[0.24em] text-white uppercase">
+              ✦ sinar
+            </span>
+            <span className="tnum text-[10px] font-semibold text-sand-50">{fmt(stats.beamDist)} m</span>
+          </div>
+        )}
         {stats.onWater && (
           <div className="mt-1 text-[8px] tracking-[0.34em] text-cyan-100/70 uppercase">〰 di atas sungai</div>
         )}

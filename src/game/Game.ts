@@ -40,7 +40,7 @@ import { buildRider } from './model';
 import { BiomeScenery, CloudLayer, Monoliths, SkyDome, SpeedPads, EnergyCrystals, getMountainSector } from './world';
 import { AudioEngine } from './audio';
 import { PALETTES, blendPalettes, type Palette } from './palette';
-import { DEFAULT_TUNE, type Tune } from './tune';
+import { DEFAULT_TUNE, SWORD_SKINS, type Tune } from './tune';
 import { HoverRig } from './hover';
 import { GradePass } from './grade';
 import { ETHEREAL_SKINS, SCARF_COLORS, Scarf } from './scarf';
@@ -87,6 +87,10 @@ export interface HudStats {
   navBearing: number;
   navDrop: number;
   onWater: boolean;
+  // ---- sinar putih (objective): jarak & arah ke pilar tujuan
+  beamOn: boolean;
+  beamDist: number;
+  beamBearing: number;
   // ---- endless descent
   gapOn: boolean;
   gapDist: number;
@@ -130,6 +134,25 @@ interface Spark {
 const GRAV = 44;
 /** derajat → radian (tune kamera menyimpan sudut dalam derajat agar ramah UI) */
 const rad = (d: number) => (d * Math.PI) / 180;
+
+/** gradien vertikal untuk pilar sinar: transparan di langit, pekat di tanah */
+function makeBeamTexture(): THREE.Texture {
+  const c = document.createElement('canvas');
+  c.width = 4;
+  c.height = 128;
+  const ctx = c.getContext('2d')!;
+  const g = ctx.createLinearGradient(0, 0, 0, 128);
+  g.addColorStop(0, 'rgba(255,255,255,0)');
+  g.addColorStop(0.55, 'rgba(255,255,255,0.22)');
+  g.addColorStop(0.86, 'rgba(255,255,255,0.85)');
+  g.addColorStop(1, 'rgba(255,255,255,1)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 4, 128);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}
 
 function safeGet(key: string): string | null {
   try {
@@ -395,6 +418,19 @@ export class Game {
     new THREE.MeshBasicMaterial({ color: 0xaef3ff, transparent: true, opacity: 0.9, depthTest: false, side: THREE.DoubleSide }),
   );
 
+  // ---- SINAR PUTIH: pilar cahaya tujuan yang turun dari langit. Rider harus
+  // menuju titik tempat sinar menyentuh pasir; setelah tercapai sinar baru
+  // muncul lebih jauh di depan → memberi arah eksplorasi yang jelas.
+  private beamGroup = new THREE.Group();
+  private beamCoreMat: THREE.MeshBasicMaterial = null as unknown as THREE.MeshBasicMaterial;
+  private beamGlowMat: THREE.MeshBasicMaterial = null as unknown as THREE.MeshBasicMaterial;
+  private beamRing: THREE.Mesh = null as unknown as THREE.Mesh;
+  private beamBase: THREE.Sprite = null as unknown as THREE.Sprite;
+  private beamPos = new THREE.Vector3(0, 0, 400);
+  private beamDist = 0;
+  private beamBearing = 0;
+  private beamsReached = 0;
+
   // ---- loop
   private raf = 0;
   private last = 0;
@@ -472,6 +508,67 @@ export class Game {
     this.scene.add(this.speedPads.group);
     this.scene.add(this.energyCrystals.group);
     this.scene.add(this.biomeScenery.group);
+
+    // ---- pilar SINAR PUTIH (objective): inti + lapisan glow + cincin & semburat
+    // di tanah. Additive + warna sedikit di atas 1.0 → disentuh bloom, terlihat
+    // "hidup" dari jarak ratusan meter. fog:false = tidak pudar dimakan kabut.
+    {
+      const tex = makeBeamTexture();
+      const mkBeamMat = (op: number) =>
+        new THREE.MeshBasicMaterial({
+          map: tex,
+          color: new THREE.Color(1.4, 1.5, 1.7), // putih dingin sedikit HDR
+          transparent: true,
+          opacity: op,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          side: THREE.DoubleSide,
+          fog: false,
+        });
+      this.beamCoreMat = mkBeamMat(0.95);
+      this.beamGlowMat = mkBeamMat(0.16);
+      const H = 340; // tinggi pilar — menembus awan di horizon
+      const core = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.15, 1.75, H, 20, 1, true),
+        this.beamCoreMat,
+      );
+      core.position.y = H / 2;
+      const glow = new THREE.Mesh(
+        new THREE.CylinderGeometry(3.4, 4.9, H, 20, 1, true),
+        this.beamGlowMat,
+      );
+      glow.position.y = H / 2;
+      this.beamRing = new THREE.Mesh(
+        new THREE.RingGeometry(1.15, 1.5, 48),
+        new THREE.MeshBasicMaterial({
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0.5,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          side: THREE.DoubleSide,
+          fog: false,
+        }),
+      );
+      this.beamRing.rotation.x = -Math.PI / 2;
+      this.beamRing.position.y = 0.25;
+      this.beamBase = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: makeGlowTexture(),
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0.45,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          fog: false,
+        }),
+      );
+      this.beamBase.scale.set(30, 30, 1);
+      this.beamBase.position.y = 2;
+      this.beamGroup.add(core, glow, this.beamRing, this.beamBase);
+      this.beamGroup.renderOrder = 5;
+      this.scene.add(this.beamGroup);
+    }
 
     this.scene.add(this.rider.group);
     applyCrystalSkin(this.rider.crystal, this.rider.crystalU, CRYSTAL_SKINS[2]); // Indigo default
@@ -643,7 +740,7 @@ export class Game {
     const sens = 0.0052;
     const o = this.orbit;
     o.yaw -= dx * sens;
-    o.pitch = clamp(o.pitch + dy * sens * 0.7, -0.5, 0.85);
+    o.pitch = clamp(o.pitch + dy * sens * 0.7, -1.35, 1.35);
     o.lastInput = this.time;
     // drag > 40 px memutus lock-on (kontrol manual menang)
     if (dragDist > 40 && this.lockTarget) {
@@ -718,9 +815,11 @@ export class Game {
     this.crystalsCollected = 0;
     this.lastSectorName = '';
     this.dashCooldown = 0;
+    this.beamsReached = 0;
+    this.spawnBeam();
     this.state = 'playing';
     this.hooks.onState(this.state);
-    this.popup('TURUN GUNUNG', 'Bermanuverlah hindari batu & jurang', 'cyan');
+    this.popup('TURUN GUNUNG', 'ikuti SINAR PUTIH di kejauhan ✦', 'cyan');
   }
 
   restart() {
@@ -737,6 +836,8 @@ export class Game {
     this.crystalsCollected = 0;
     this.lastSectorName = '';
     this.dashCooldown = 0;
+    this.beamsReached = 0;
+    this.spawnBeam();
     this.state = 'playing';
     this.audio.init();
     this.audio.resume();
@@ -1315,9 +1416,9 @@ export class Game {
         this.sandC,
       );
       if (tex) this.rider.setEnv(tex);
-      // ---- character colour (crystal skin + metal accents)
+      // ---- character colour (crystal skin + metal accents + sword skin)
       const T = this.tune;
-      const key = `${T.crystalCustom ? T.crystalC : Math.round(T.crystalSkin)}|${Math.round(T.accentMetal)}`;
+      const key = `${T.crystalCustom ? T.crystalC : Math.round(T.crystalSkin)}|${Math.round(T.accentMetal)}|${Math.round(T.swordSkin)}`;
       if (key !== this.crystalKey) {
         this.crystalKey = key;
         const skin = T.crystalCustom
@@ -1327,6 +1428,33 @@ export class Game {
         const metal = ACCENT_METALS[Math.round(T.accentMetal) % ACCENT_METALS.length];
         this.rider.gold.color.set(metal.color);
         this.rider.gold.emissive.set(metal.emissive);
+        // ---- skin pedang-skate (0 = Silver Surfer: krom reflektif penuh)
+        const ss = Math.round(T.swordSkin) % SWORD_SKINS.length;
+        if (ss === 0) {
+          // papan Silver Surfer: krom murni — pantulan langit dari env map PMREM
+          const st = this.rider.steel;
+          st.color.set(0xffffff);
+          st.metalness = 1;
+          st.roughness = 0.07;
+          st.envMapIntensity = 1.8;
+          st.emissive.set(0x9fb6d8);
+          const gh = this.rider.goldHilt;
+          gh.color.set(0xf2f7ff);
+          gh.metalness = 1;
+          gh.roughness = 0.13;
+        } else {
+          // bilah baja kebiruan + gagang emas (look asli release pertama)
+          const st = this.rider.steel;
+          st.color.set(0xd8e4f5);
+          st.metalness = 0.92;
+          st.roughness = 0.28;
+          st.envMapIntensity = 0.8;
+          st.emissive.set(0x285580);
+          const gh = this.rider.goldHilt;
+          gh.color.set(0xefca85);
+          gh.metalness = 0.92;
+          gh.roughness = 0.32;
+        }
       }
       // crystal sparkle respects the anti-glare controls and is reduced and capped
       this.rider.crystalU.uSpark.value = Math.min(0.25, this.tune.emissive * this.tune.glare * 0.22);
@@ -1552,6 +1680,9 @@ export class Game {
         navBearing: this.navBearing,
         navDrop: this.navFall ? this.navFall.drop : 0,
         onWater: this.onWater,
+        beamOn: this.state === 'playing' && this.beamDist > 15,
+        beamDist: this.beamDist,
+        beamBearing: this.beamBearing,
         gapOn: this.gapOn,
         gapDist: this.gapDist,
         gapW: this.gapW,
@@ -1977,6 +2108,9 @@ export class Game {
       // screen-right is (-fz, fx) in this world
       this.navBearing = Math.atan2(dx * -fz + dz * fx, dx * fx + dz * fz);
     }
+
+    // ---- sinar putih: animasi pilar + panduan arah + deteksi tercapai
+    this.updateBeam(dt);
 
     // ---- wake colour follows the surface (blends seamlessly with current sand tint)
     if (!this.onWater) {
@@ -3088,12 +3222,15 @@ export class Game {
         // kamera action-cam terpasang di dada rider: super dekat, FOV lebar,
         // ikutan kencang + goyangan handheld halus. Drag = toleh sekeliling,
         // scroll = sedikit maju/mundur. ROLL mengikuti carve → terasa "di badan".
+        // Default ×2.0 · 30°; sudut vertikal bisa diatur 0–90° (90° = menunduk
+        // penuh ke lintasan) — arah pandang memakai vektor arah, bukan tan(),
+        // jadi tetap stabil di sudut ekstrem.
         kPos = 24;
         kLook = 30;
         clearance = 0.45;
         swayScale = 0.55;
         const az = this.camHeading + Math.PI + rad(T.cam3Yaw) + o.yaw;
-        const pitch = clamp(rad(T.cam3Pitch) + o.pitch, -0.5, 0.6);
+        const pitch = clamp(rad(T.cam3Pitch) + o.pitch, -0.6, Math.PI / 2);
         const dist = 0.85 * T.cam3Dist * o.zoom;
         const chest = 0.75 + 1.05 * T.bodyHeight; // tinggi dada mengikuti postur rider
         this.t2.set(
@@ -3101,12 +3238,14 @@ export class Game {
           py + chest + Math.sin(pitch) * 1.2,
           pz + Math.cos(az) * dist,
         );
-        // menatap jauh ke lintasan — pitch mengarah turun mengikuti lereng
+        // menatap jauh ke lintasan: pitch memutar arah pandang (30° = menunduk
+        // menyusuri lereng, 90° = tegak lurus ke bawah)
         const ahead = 30;
+        const cosP = Math.cos(pitch);
         this.t3.set(
-          px - Math.sin(az) * ahead,
-          py + chest + 0.25 - Math.tan(pitch) * ahead,
-          pz - Math.cos(az) * ahead,
+          px + Math.sin(az) * dist - Math.sin(az) * ahead * cosP,
+          py + chest + Math.sin(pitch) * 1.2 - Math.sin(pitch) * ahead,
+          pz + Math.cos(az) * dist - Math.cos(az) * ahead * cosP,
         );
         // FOV sangat lebar + "napas" halus khas lensa action-cam
         fovOverride = (94 + 8 * sn) * (0.7 + 0.3 * (T.fov / 0.75)) + Math.sin(this.time * 1.9) * 1.2;
@@ -3222,6 +3361,67 @@ export class Game {
       }
     }
     this.lockTarget = best;
+  }
+
+  // ------------------------------------------------------------ sinar putih
+  /**
+   * Tempatkan sinar berikutnya: 380–700 m di depan arah luncur, serong acak
+   * ±150 m, DENGAN validasi — titik di dalam / tepi jurang ditolak supaya
+   * tujuan selalu bisa dituju dengan seluncur.
+   */
+  private spawnBeam() {
+    const fx = Math.sin(this.yaw);
+    const fz = Math.cos(this.yaw);
+    for (let i = 0; i < 16; i++) {
+      const dist = 380 + Math.random() * 320;
+      const lat = (Math.random() - 0.5) * 300;
+      const x = this.pos.x + fx * dist - fz * lat;
+      const z = this.pos.z + fz * dist + fx * lat;
+      if (chasmAt(z) || chasmAt(z - 30) || chasmAt(z + 30)) continue;
+      this.beamPos.set(x, duneHeight(x, z), z);
+      return;
+    }
+    const x = this.pos.x + fx * 440;
+    const z = this.pos.z + fz * 440;
+    this.beamPos.set(x, duneHeight(x, z), z);
+  }
+
+  /** animasi pilar + hitung jarak/bearing + deteksi tercapai */
+  private updateBeam(dt: number) {
+    void dt;
+    const gy = duneHeight(this.beamPos.x, this.beamPos.z);
+    this.beamPos.y = gy;
+    this.beamGroup.position.set(this.beamPos.x, gy, this.beamPos.z);
+    // denyut lembut: inti bernapas, semburat tanah berkedip
+    const pulse = 0.5 + 0.5 * Math.sin(this.time * 2.1);
+    this.beamCoreMat.opacity = 0.78 + 0.17 * pulse;
+    this.beamGlowMat.opacity = 0.13 + 0.06 * pulse;
+    (this.beamBase.material as THREE.SpriteMaterial).opacity = 0.34 + 0.16 * pulse;
+    // cincin mengembang keluar berulang → menandai titik pendaratan
+    const phase = (this.time * 0.55) % 1;
+    const rs = 1 + phase * 1.8;
+    this.beamRing.scale.setScalar(rs);
+    (this.beamRing.material as THREE.MeshBasicMaterial).opacity = 0.55 * (1 - phase);
+
+    if (this.state !== 'playing') return;
+    const dx = this.beamPos.x - this.pos.x;
+    const dz = this.beamPos.z - this.pos.z;
+    this.beamDist = Math.hypot(dx, dz);
+    const fx = Math.sin(this.camHeading);
+    const fz = Math.cos(this.camHeading);
+    // konvensi sama dengan navigator air terjun: kanan-layar = (-fz, fx)
+    this.beamBearing = Math.atan2(dx * -fz + dz * fx, dx * fx + dz * fz);
+    if (this.beamDist < 15) {
+      this.beamsReached++;
+      const pts = Math.round(500 * this.mult());
+      this.score += pts;
+      this.combo += 2;
+      this.flow = clamp(this.flow + 18, 0, 100);
+      this.popup('SINAR TERCAPAI ✦', `+${pts} · sinar ke-${this.beamsReached}`, 'gold');
+      this.audio.chime(8, 0.2);
+      this.shake = Math.min(1, this.shake + 0.25);
+      this.spawnBeam();
+    }
   }
 }
 

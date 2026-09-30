@@ -9,6 +9,7 @@ import {
   FOG_PRESETS,
   LIGHT_PRESETS,
   MASTER_PRESETS,
+  SWORD_SKINS,
   WORLD_PRESETS,
   type Tune,
 } from '../game/tune';
@@ -1509,6 +1510,39 @@ export function SettingsPanel({
                 ))}
               </div>
 
+              {/* ---------------- sword skin */}
+              <div className="mt-6 mb-2 text-[9px] font-semibold uppercase tracking-[0.3em] text-sand-200/60">
+                skin pedang-skate
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {SWORD_SKINS.map((s, i) => (
+                  <button
+                    key={s.name}
+                    onClick={() => set({ swordSkin: i })}
+                    className={`rounded-xl border px-3 py-2 text-left transition ${
+                      Math.round(l.swordSkin ?? 0) === i
+                        ? 'border-sand-100/90 bg-white/15'
+                        : 'border-sand-200/25 bg-black/20 hover:border-sand-100/70'
+                    }`}
+                  >
+                    <div
+                      className="mb-1 h-3 w-full rounded-full"
+                      style={{
+                        background:
+                          i === 0
+                            ? 'linear-gradient(90deg,#f8fbff,#c9d8ec 30%,#ffffff 55%,#b8c9e0)'
+                            : 'linear-gradient(90deg,#e8f0fb,#b9c9e0 55%,#efca85)',
+                        boxShadow: 'inset 0 0 6px rgba(255,255,255,0.8)',
+                      }}
+                    />
+                    <div className="font-display text-[14px] leading-none">{s.name}</div>
+                    <div className="mt-1 text-[7px] leading-tight uppercase tracking-[0.1em] text-sand-200/55">
+                      {s.desc}
+                    </div>
+                  </button>
+                ))}
+              </div>
+
               {/* ---------------- scarf skin */}
               <div className="mt-6 mb-2 text-[9px] font-semibold uppercase tracking-[0.3em] text-sand-200/60">
                 skin slayer
@@ -1799,11 +1833,11 @@ export function SettingsPanel({
                     dist: 'cam3Dist',
                     pitch: 'cam3Pitch',
                     yaw: 'cam3Yaw',
-                    pMin: -20,
-                    pMax: 25,
+                    pMin: -30,
+                    pMax: 90,
                     yMin: -45,
                     yMax: 45,
-                    pitchHint: 'positif = menunduk ke lintasan turun',
+                    pitchHint: 'default 30° menunduk · 90° = menunduk penuh ke lintasan',
                   },
                 ];
                 const c = cfg[m] ?? cfg[0];
@@ -1814,10 +1848,10 @@ export function SettingsPanel({
                     </div>
                     <Slider
                       label="jarak mode ini"
-                      hint="mengalikan jarak khusus mode ini"
+                      hint="mengalikan jarak khusus mode ini (bodycam default ×2.0)"
                       value={l[c.dist]}
                       min={0.5}
-                      max={1.8}
+                      max={5}
                       onChange={(v) => set({ [c.dist]: v } as Partial<Tune>)}
                       fmt={(v) => `×${v.toFixed(2)}`}
                     />
