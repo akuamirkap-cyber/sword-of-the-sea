@@ -57,6 +57,7 @@ export interface Rider {
   animate: (dt: number, a: RiderAnim) => void;
   impulse: (strength: number) => void;
   setEnv: (tex: THREE.Texture) => void;
+  setBoard: (type: number) => void; // 0 = papan surf Silver Surfer · 1 = pedang
 }
 
 // ============================================================ grab poses
@@ -365,6 +366,29 @@ export function buildRider(): Rider {
   const tail = new THREE.Object3D();
   tail.position.set(0, 0.03, -1.35);
   sword.add(tail);
+
+  // ---- PAPAN SURF Silver Surfer: elipsoid krom panjang — hidung & ekor
+  // membulat, dek pipih, memakai logam yang sama dengan pedang (krom).
+  // Anak dari grup pedang → semua flip/pivot/scaling trik tetap bekerja.
+  const surf = (() => {
+    const g = new THREE.SphereGeometry(1, 40, 26);
+    g.scale(0.31, 0.052, 1.72); // panjang 3,44 m, dek pipih ala papan surf
+    g.translate(0, 0.045, 0.38);
+    const m = new THREE.Mesh(g, steel);
+    m.visible = false;
+    sword.add(m);
+    return m;
+  })();
+
+  /** papan seluncur: 0 = papan surf Silver Surfer · 1 = pedang skate */
+  function setBoard(type: number) {
+    const board = Math.round(type) % 2 === 0;
+    surf.visible = board;
+    blade.visible = !board;
+    guard.visible = !board;
+    grip.visible = !board;
+    pommel.visible = !board;
+  }
 
   // ---------------------------------------------------------------- body parts
   const body = new THREE.Group();
@@ -887,5 +911,5 @@ export function buildRider(): Rider {
     poseW: 0,
   });
 
-  return { group, tail, neck, tailBone, blade, crystal, crystalU, gold, steel, goldHilt, animate, impulse, setEnv };
+  return { group, tail, neck, tailBone, blade, crystal, crystalU, gold, steel, goldHilt, animate, impulse, setEnv, setBoard };
 }

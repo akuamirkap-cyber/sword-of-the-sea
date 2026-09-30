@@ -349,6 +349,7 @@ export class Game {
   private scarfColorIdx = -1;
   private scarfSkinKey = -1;
   private crystalKey = '';
+  private boardCur = -1;
   private scarfSparkAcc = 0;
   private sparkCol = new THREE.Color();
   private sparkMesh: THREE.InstancedMesh;
@@ -1475,6 +1476,13 @@ export class Game {
           gh.roughness = 0.32;
         }
       }
+      // ---- papan seluncur: papan surf Silver Surfer <-> pedang skate
+      const bt = ((Math.round(T.boardType) % 2) + 2) % 2;
+      if (bt !== this.boardCur) {
+        this.boardCur = bt;
+        this.rider.setBoard(bt);
+      }
+
       // crystal sparkle respects the anti-glare controls and is reduced and capped
       this.rider.crystalU.uSpark.value = Math.min(0.25, this.tune.emissive * this.tune.glare * 0.22);
       this.rider.crystalU.uGlow.value = Math.min(0.28, 0.15 + 0.1 * Math.min(1.0, this.tune.glare));

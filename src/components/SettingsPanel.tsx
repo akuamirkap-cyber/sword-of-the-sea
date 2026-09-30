@@ -1519,9 +1519,44 @@ export function SettingsPanel({
                 ))}
               </div>
 
-              {/* ---------------- sword skin */}
+              {/* ---------------- papan seluncur */}
               <div className="mt-6 mb-2 text-[9px] font-semibold uppercase tracking-[0.3em] text-sand-200/60">
-                skin pedang-skate
+                papan seluncur — gaya seluncur
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  ['Papan Silver Surfer', 'papan surf krom ikonik (default)', 0],
+                  ['Pedang', 'pedang skate klasik — kalau bosan papan', 1],
+                ] as [string, string, number][]).map(([name, desc, v]) => (
+                  <button
+                    key={name}
+                    onClick={() => set({ boardType: v })}
+                    className={`rounded-xl border px-3 py-2 text-left transition ${
+                      Math.round(l.boardType) % 2 === v
+                        ? 'border-sand-100/90 bg-white/15'
+                        : 'border-sand-200/25 bg-black/20 hover:border-sand-100/70'
+                    }`}
+                  >
+                    <div
+                      className="mb-1 h-3 w-full rounded-full"
+                      style={{
+                        background:
+                          v === 0
+                            ? 'linear-gradient(90deg,#f8fbff,#c9d8ec 30%,#ffffff 55%,#b8c9e0)'
+                            : 'linear-gradient(90deg,#e8f0fb,#b9c9e0 55%,#efca85)',
+                        boxShadow: 'inset 0 0 6px rgba(255,255,255,0.8)',
+                      }}
+                    />
+                    <div className="font-display text-[14px] leading-none">{name}</div>
+                    <div className="mt-1 text-[7px] leading-tight uppercase tracking-[0.1em] text-sand-200/55">
+                      {desc}
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-4 mb-2 text-[9px] font-semibold uppercase tracking-[0.3em] text-sand-200/60">
+                skin logam (papan & pedang)
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {SWORD_SKINS.map((s, i) => (
@@ -1534,16 +1569,6 @@ export function SettingsPanel({
                         : 'border-sand-200/25 bg-black/20 hover:border-sand-100/70'
                     }`}
                   >
-                    <div
-                      className="mb-1 h-3 w-full rounded-full"
-                      style={{
-                        background:
-                          i === 0
-                            ? 'linear-gradient(90deg,#f8fbff,#c9d8ec 30%,#ffffff 55%,#b8c9e0)'
-                            : 'linear-gradient(90deg,#e8f0fb,#b9c9e0 55%,#efca85)',
-                        boxShadow: 'inset 0 0 6px rgba(255,255,255,0.8)',
-                      }}
-                    />
                     <div className="font-display text-[14px] leading-none">{s.name}</div>
                     <div className="mt-1 text-[7px] leading-tight uppercase tracking-[0.1em] text-sand-200/55">
                       {s.desc}

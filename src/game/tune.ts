@@ -109,6 +109,7 @@ export interface Tune {
   crystalC: string;
   accentMetal: number; // index into ACCENT_METALS
   swordSkin: number; // index into SWORD_SKINS (0 = Silver Surfer krom, default)
+  boardType: number; // PAPAN: 0 = papan surf Silver Surfer (default) · 1 = pedang skate
   bodyHeight: number; // 1 = normal, ~0.78 = short, ~0.5 = chibi
   headSize: number;
   swordSize: number;
@@ -292,7 +293,8 @@ export const DEFAULT_TUNE: Tune = {
   crystalCustom: false,
   crystalC: '#8c80ff',
   accentMetal: 0,
-  swordSkin: 0, // DEFAULT = Silver Surfer (papan krom reflektif)
+  swordSkin: 0, // DEFAULT = Silver Surfer (krom reflektif)
+  boardType: 0, // DEFAULT = papan surf krom ikonik Silver Surfer
   bodyHeight: 1, // proporsi dewasa ala Silver Surfer (chibi masih ada di preset)
   headSize: 1,
   swordSize: 0.68,
