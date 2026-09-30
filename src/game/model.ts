@@ -57,7 +57,6 @@ export interface Rider {
   animate: (dt: number, a: RiderAnim) => void;
   impulse: (strength: number) => void;
   setEnv: (tex: THREE.Texture) => void;
-  setCloak: (on: boolean) => void; // jubah journey: tampilkan hood
 }
 
 // ============================================================ grab poses
@@ -527,31 +526,9 @@ export function buildRider(): Rider {
     head.add(m);
     return m;
   })();
-  // ---- JUBAH ala Journey: hood (kerudung) di belakang kepala — merah jubah
-  const hood = (() => {
-    // cangkang bola sebagian: bukaan menghadap depan, menutupi belakang kepala
-    const g = new THREE.SphereGeometry(0.121, 26, 18, Math.PI * 0.075, Math.PI * 1.15, 0, Math.PI * 0.62);
-    const m = new THREE.MeshStandardMaterial({
-      color: 0x9c2a1c,
-      roughness: 0.82,
-      metalness: 0,
-      emissive: new THREE.Color(0x2a0a06),
-      emissiveIntensity: 0.4,
-      side: THREE.DoubleSide,
-    });
-    const hood = new THREE.Mesh(g, m);
-    hood.position.set(0, 0.014, -0.01);
-    hood.visible = false;
-    head.add(hood);
-    return hood;
-  })();
   const tailBone = new THREE.Object3D();
   tailBone.position.set(0, -0.05, -0.11);
   body.add(tailBone);
-
-  function setCloak(on: boolean) {
-    hood.visible = on;
-  }
 
   group.scale.setScalar(1.18);
 
@@ -910,5 +887,5 @@ export function buildRider(): Rider {
     poseW: 0,
   });
 
-  return { group, tail, neck, tailBone, blade, crystal, crystalU, gold, steel, goldHilt, animate, impulse, setEnv, setCloak };
+  return { group, tail, neck, tailBone, blade, crystal, crystalU, gold, steel, goldHilt, animate, impulse, setEnv };
 }

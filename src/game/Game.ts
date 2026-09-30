@@ -39,7 +39,6 @@ import { Motes, Particles, Ripples, TrailRibbon, WindStreaks, makeGlowTexture, m
 import { buildRider } from './model';
 import { BiomeScenery, CloudLayer, Monoliths, SkyDome, SpeedPads, EnergyCrystals, getMountainSector } from './world';
 import { Aurora } from './aurora';
-import { Cloak } from './cloak';
 import { AudioEngine } from './audio';
 import { PALETTES, blendPalettes, type Palette } from './palette';
 import { DEFAULT_TUNE, SWORD_SKINS, type Tune } from './tune';
@@ -252,7 +251,6 @@ export class Game {
   private fog: THREE.FogExp2;
   private sky = new SkyDome();
   private aurora = new Aurora();
-  private cloak = new Cloak();
   private clouds = new CloudLayer();
   private sun = new THREE.DirectionalLight(0xffcf9a, 1.7);
   private hemi = new THREE.HemisphereLight(0xa8ccff, 0xe2a97a, 1.05);
@@ -627,7 +625,6 @@ export class Game {
     this.scene.add(this.scarfA.mesh);
     this.scene.add(this.scarfB.mesh);
     this.scene.add(this.scarfTail.mesh);
-    this.scene.add(this.cloak.mesh); // jubah ala Journey
     // ekor slugpup: kain putih pucat, bukan selendang warna
     this.scarfTail.setColor('#e9eef4');
     this.scarfTail.setSkin(false, 0);
@@ -1903,22 +1900,15 @@ export class Game {
       }
     }
 
-    // ---- JUBAH ala Journey: kain verlet dari bahu + sulaman emas menyala.
-    // Pendar sulaman mengikuti energi FLOW — penuh flow = gemilang (kaya
-    // scarf power di Journey), habis = redup.
-    this.cloak.mesh.visible = T.cloak;
-    this.rider.setCloak(T.cloak);
-    if (T.cloak) {
-      this.cloak.update(
-        dt,
-        this.rider.neck,
-        this.vel,
-        this.time,
-        { glow: T.cloakGlow * (0.35 + 0.65 * clamp(this.flow / 100, 0, 1)) },
-        this.fog.color,
-        this.fog.density * 200,
-      );
-    }
+    // ---- SULAMAN EMAS ala Journey di SLAYER: diamond & chevron emas
+    // berdenyut, makin gemilang saat energi FLOW penuh (ala scarf power).
+    // Hanya untuk skin kain; ethereal punya gaya cahayanya sendiri.
+    const emb = T.scarfEmbroidery && Math.round(T.scarfSkin) === 0;
+    const embGlow = T.scarfEmbroideryGlow * (0.35 + 0.65 * clamp(this.flow / 100, 0, 1));
+    this.scarfA.setEmbroidery(emb);
+    this.scarfB.setEmbroidery(emb);
+    this.scarfA.setGoldGlow(embGlow);
+    this.scarfB.setGoldGlow(embGlow);
 
     // ---- ethereal: motes of light drift off the veil
     if (this.scarfA.ethereal && T.particles > 0.01) {

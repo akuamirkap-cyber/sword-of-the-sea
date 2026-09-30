@@ -42,6 +42,62 @@ export interface ScarfOpts {
   flutter: number;
 }
 
+function makeEmbroideryMaterial() {
+  const u = {
+    uTime: { value: 0 },
+    uGlow: { value: 1 },
+  };
+  const mat = new THREE.ShaderMaterial({
+    uniforms: u,
+    vertexShader: /* glsl */ `
+      varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+      void main(){
+        vUv = uv;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vV = -mv.xyz;
+        vN = normalMatrix * normal;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: /* glsl */ `
+      uniform float uTime; uniform float uGlow;
+      varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+      float h21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+      void main(){
+        vec2 uv = vUv; // x: lebar pita, y: leher -> ujung
+        vec3 gold = vec3(1.0, 0.78, 0.32);
+        // dasar: merah tua di leher -> oker hangat ke ujung (ala jubah Journey)
+        vec3 base = mix(vec3(0.60, 0.12, 0.08), vec3(0.82, 0.33, 0.13), smoothstep(0.15, 0.95, uv.y));
+        base += (h21(floor(uv * vec2(90.0, 200.0))) - 0.5) * 0.05; // tenunan halus
+        // trim krem di tepi panjang & ujung pita
+        float edge = smoothstep(0.09, 0.045, min(uv.x, 1.0 - uv.x));
+        float hem = smoothstep(0.90, 0.93, uv.y);
+        base = mix(base, vec3(0.93, 0.86, 0.72), clamp(max(edge, hem), 0.0, 1.0));
+        // SULAMAN EMAS: diamond besar & kecil selang-seling + chevron dekat ujung
+        float sym = 0.0;
+        float cell = uv.y * 11.0;
+        float ci = floor(cell);
+        float cu = fract(cell) - 0.5;
+        float d1 = abs(cu) * 0.9 + abs(uv.x - 0.5) * 1.1;
+        sym = max(sym, smoothstep(0.30, 0.20, d1) * step(mod(ci, 2.0), 0.5));
+        float d2 = abs(cu) * 0.9 + abs(uv.x - 0.5) * 1.5;
+        sym = max(sym, smoothstep(0.22, 0.14, d2) * step(0.5, mod(ci, 2.0)));
+        float ch = abs((uv.x - 0.5) * 1.5 + (uv.y - 0.82) * 2.6);
+        sym = max(sym, smoothstep(0.16, 0.09, ch));
+        float pulse = 0.72 + 0.28 * sin(uTime * 1.35 + uv.y * 11.0 + uv.x * 3.1);
+        vec3 emb = gold * sym * uGlow * pulse * 1.9;
+        // pencahayaan dua sisi + fresnel emas di lipatan
+        vec3 N = normalize(vN);
+        if (!gl_FrontFacing) N = -N;
+        float diff = 0.52 + 0.48 * max(dot(N, normalize(vec3(0.35, 0.85, 0.4))), 0.0);
+        float fres = pow(1.0 - abs(dot(N, normalize(vV))), 2.2);
+        vec3 col = base * diff + gold * fres * 0.30 + emb;
+        gl_FragColor = vec4(col, 1.0);
+      }`,
+    side: THREE.DoubleSide,
+  });
+  return { mat, u };
+}
+
 function makeEtherealMaterial() {
   const u = {
     uTime: { value: 0 },
@@ -127,6 +183,9 @@ export class Scarf {
   private clothMat: THREE.MeshStandardMaterial;
   private etherMat: THREE.ShaderMaterial;
   private eu: ReturnType<typeof makeEtherealMaterial>['u'];
+  private embroideryMat: THREE.ShaderMaterial;
+  private ju: ReturnType<typeof makeEmbroideryMaterial>['u'];
+  private embroidered = false;
   private init = false;
   private phase: number;
 
@@ -190,6 +249,9 @@ export class Scarf {
     const em = makeEtherealMaterial();
     this.etherMat = em.mat;
     this.eu = em.u;
+    const gm = makeEmbroideryMaterial();
+    this.embroideryMat = gm.mat;
+    this.ju = gm.u;
 
     this.mesh = new THREE.Mesh(geo, this.clothMat);
     this.mesh.frustumCulled = false;
@@ -206,11 +268,22 @@ export class Scarf {
   /** switch between the cloth and the ethereal skin */
   setSkin(ethereal: boolean, paletteIdx: number) {
     this.ethereal = ethereal;
-    this.mesh.material = ethereal ? this.etherMat : this.clothMat;
+    this.mesh.material = ethereal ? this.etherMat : this.embroidered ? this.embroideryMat : this.clothMat;
     const s = ETHEREAL_SKINS[((paletteIdx % ETHEREAL_SKINS.length) + ETHEREAL_SKINS.length) % ETHEREAL_SKINS.length];
     this.eu.uCore.value.set(s.core);
     this.eu.uEdge.value.set(s.edge);
     this.eu.uHi.value.set(s.hi);
+  }
+
+  /** sulaman emas ala Journey pada skin kain */
+  setEmbroidery(on: boolean) {
+    this.embroidered = on;
+    if (!this.ethereal) this.mesh.material = on ? this.embroideryMat : this.clothMat;
+  }
+
+  /** kekuatan pendar sulaman emas */
+  setGoldGlow(v: number) {
+    this.ju.uGlow.value = v;
   }
 
   /** ethereal glow strength (follows the anti-glare controls) */
@@ -240,6 +313,7 @@ export class Scarf {
     const seg = o.length / (N - 1);
     if (!this.init || anchor.distanceTo(this.p[0]) > 25) this.reset(anchor, back, seg);
     this.eu.uTime.value = time + this.phase;
+    this.ju.uTime.value = time + this.phase;
 
     this.p[0].copy(anchor);
     this.prev[0].copy(anchor);

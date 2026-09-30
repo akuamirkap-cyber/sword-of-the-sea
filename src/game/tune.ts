@@ -99,9 +99,9 @@ export interface Tune {
   scarfSkin: number; // 0 = cloth, 1 = ethereal
   scarfEthereal: number; // index into ETHEREAL_SKINS
 
-  // ---- JUBAH (ala Journey)
-  cloak: boolean; // jubah kain dari bahu + sulaman emas menyala + hood
-  cloakGlow: number; // kekuatan pendar sulaman emas (mengikuti energi flow)
+  // ---- SLAYER: sulaman emas ala Journey (diamond & chevron berdenyut)
+  scarfEmbroidery: boolean; // sulaman emas pada slayer skin kain
+  scarfEmbroideryGlow: number; // kekuatan pendar sulaman (ikut energi flow)
 
   // ---- CHARACTER
   crystalSkin: number; // index into CRYSTAL_SKINS
@@ -282,11 +282,11 @@ export const DEFAULT_TUNE: Tune = {
   scarfColor: 0,
   scarfTwin: false, // DEFAULT = satu ujung (twin tail bisa diaktifkan di Settings)
   scarfGlow: false,
-  scarfSkin: 1,
+  scarfSkin: 0, // DEFAULT: kain (agar sulaman emas terlihat)
   scarfEthereal: 0,
 
-  cloak: true, // DEFAULT: jubah traveller ala Journey menyala mengikuti flow
-  cloakGlow: 1,
+  scarfEmbroidery: true, // DEFAULT: slayer memakai sulaman emas ala Journey
+  scarfEmbroideryGlow: 1,
 
   crystalSkin: 2, // Indigo default
   crystalCustom: false,
