@@ -62,7 +62,8 @@ export class Particles {
         void main(){
           vA = aAlpha; vC = aColor;
           vec4 mv = modelViewMatrix * vec4(position, 1.0);
-          gl_PointSize = aSize * (420.0 / max(0.001, -mv.z));
+          // cap ukuran di layar: partikel dekat kamera tidak membengkak jadi blob raksasa
+          gl_PointSize = min(aSize * (420.0 / max(0.001, -mv.z)), 110.0);
           gl_Position = projectionMatrix * mv;
         }`,
       fragmentShader: `

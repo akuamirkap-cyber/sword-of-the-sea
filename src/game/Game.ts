@@ -12,6 +12,7 @@ import {
   mix,
   rideHeight,
   riverSlope,
+  setWorldMode,
   smoothHeight,
   smoothstep,
   surfaceRadius,
@@ -36,7 +37,7 @@ import { AXIS_Z, UP } from './math';
 import { TerrainField } from './terrain';
 import { Motes, Particles, Ripples, TrailRibbon, makeGlowTexture, makeSoftDiscTexture } from './fx';
 import { buildRider } from './model';
-import { CloudLayer, Monoliths, SkyDome, SpeedPads, EnergyCrystals, getMountainSector } from './world';
+import { BiomeScenery, CloudLayer, Monoliths, SkyDome, SpeedPads, EnergyCrystals, getMountainSector } from './world';
 import { AudioEngine } from './audio';
 import { PALETTES, blendPalettes, type Palette } from './palette';
 import { DEFAULT_TUNE, type Tune } from './tune';
@@ -248,6 +249,7 @@ export class Game {
   private monoliths = new Monoliths(8);
   private speedPads = new SpeedPads();
   private energyCrystals = new EnergyCrystals();
+  private biomeScenery = new BiomeScenery();
   private shield = 3;
   private maxShield = 3;
   private shieldCooldown = 0;
@@ -265,6 +267,8 @@ export class Game {
   private trailWake = new TrailRibbon(140, 0.32, 0x8a7058, 0.75, false, 0.18);
   private trailScarf = new TrailRibbon(100, 0.10, 0x9ad9ff, 0.85, true, 0.2);
   private trailAir = new TrailRibbon(130, 0.14, 0xbfe8ff, 1.2, true, 0.2);
+  /** ekor putih halus di ujung pedang — pendek & lembut seperti trail paus */
+  private trailSword = new TrailRibbon(190, 0.22, 0xf6faff, 0.6, false, 0.2);
   private scarfA = new Scarf(0);
   private scarfB = new Scarf(1.7);
   private whales = new WhalePod(6);
@@ -367,6 +371,21 @@ export class Game {
   private camRoll = 0;
   private camFov = 66;
   private lookSmooth = new THREE.Vector3();
+  // ---- kamera Sekiro: state orbit + lock-on (kristal energi)
+  private orbit = { yaw: 0, pitch: 0.14, zoom: 1, lastInput: -10 };
+  private lockTarget: { x: number; y: number; z: number; collected: boolean } | null = null;
+  private lockCooldown = 0;
+  // ---- kamera "drone pengikut mobil": heading MILIK KAMERA sendiri — dari
+  // arah luncur (velocity), BUKAN dari badan rider. Rider = bola: badannya
+  // boleh spin trick 1080°, layar tidak ikut muter.
+  private camHeading = 0;
+  private camHeadingInit = false;
+  private clearLift = 0; // clearance terrain yang di-haluskan (naik cepat, turun pelan)
+  /** cincin reticle lock-on (billboard, depthTest off = selalu terlihat) */
+  private lockRing = new THREE.Mesh(
+    new THREE.RingGeometry(0.55, 0.72, 40),
+    new THREE.MeshBasicMaterial({ color: 0xaef3ff, transparent: true, opacity: 0.9, depthTest: false, side: THREE.DoubleSide }),
+  );
 
   // ---- loop
   private raf = 0;
@@ -394,7 +413,10 @@ export class Game {
   private ro: ResizeObserver | null = null;
   private pointerId: number | null = null;
   private pointerStart = 0;
+  private pointerStartY = 0;
   private pointerX = 0;
+  private pointerY = 0;
+  private pointerDownT = 0;
 
 
   constructor(container: HTMLElement, hooks: GameHooks) {
@@ -441,6 +463,7 @@ export class Game {
     this.scene.add(this.monoliths.group);
     this.scene.add(this.speedPads.group);
     this.scene.add(this.energyCrystals.group);
+    this.scene.add(this.biomeScenery.group);
 
     this.scene.add(this.rider.group);
     applyCrystalSkin(this.rider.crystal, this.rider.crystalU, CRYSTAL_SKINS[2]); // Indigo default
@@ -478,6 +501,10 @@ export class Game {
     this.scene.add(this.trailWake.mesh);
     this.scene.add(this.trailScarf.mesh);
     this.scene.add(this.trailAir.mesh);
+    this.scene.add(this.trailSword.mesh);
+    this.lockRing.renderOrder = 30;
+    this.lockRing.visible = false;
+    this.scene.add(this.lockRing);
     this.scene.add(this.scarfA.mesh);
     this.scene.add(this.scarfB.mesh);
     this.scene.add(this.whales.group);
@@ -553,6 +580,10 @@ export class Game {
     }
     if (e.code === 'KeyS' || e.code === 'ArrowDown') this.pressStyle(-1); // auto frontflip
     if (e.code === 'KeyF') this.pressCombo(); // auto combo
+    // ---- gaya kamera (1 = Epik · 2 = Dekat · 3 = Sekiro)
+    if (e.code === 'Digit1') this.setCamStyle(0);
+    if (e.code === 'Digit2') this.setCamStyle(1);
+    if (e.code === 'Digit3') this.setCamStyle(2);
     // ---- skate board tricks (J K L I U O M , N)
     const bt = BOARD_TRICKS.find((b) => b.key === e.code);
     if (bt) this.pressBoardTrick(bt.id);
@@ -576,18 +607,56 @@ export class Game {
     }
     this.pointerId = e.pointerId;
     this.pointerStart = e.clientX;
+    this.pointerStartY = e.clientY;
     this.pointerX = e.clientX;
-    // Alto style: touch = jump, keep holding = flip
-    this.pressJump();
+    this.pointerY = e.clientY;
+    this.pointerDownT = this.time;
+    // Alto style: touch = jump, keep holding = flip.
+    // Mode Sekiro: tahan = orbit kamera, jadi lompat hanya saat TAP singkat (di pointerup).
+    if (this.tune.camStyle !== 1) this.pressJump();
   };
   private onPointerMove = (e: PointerEvent) => {
     if (this.pointerId !== e.pointerId) return;
+    const dx = e.clientX - this.pointerX;
+    const dy = e.clientY - this.pointerY;
     this.pointerX = e.clientX;
+    this.pointerY = e.clientY;
+    // ---- SEKIRO: drag = orbit kamera
+    if (this.tune.camStyle === 1 && this.state === 'playing') {
+      const sens = 0.0052;
+      const o = this.orbit;
+      o.yaw -= dx * sens;
+      o.pitch = clamp(o.pitch + dy * sens * 0.7, -0.3, 1.1);
+      o.lastInput = this.time;
+      // drag > 40 px memutus lock-on (kontrol manual menang)
+      const dragDist = Math.hypot(e.clientX - this.pointerStart, e.clientY - this.pointerStartY);
+      if (dragDist > 40 && this.lockTarget) {
+        this.lockTarget = null;
+        this.lockCooldown = 2.5;
+      }
+    }
   };
   private onPointerUp = (e: PointerEvent) => {
     if (this.pointerId !== e.pointerId) return;
     this.pointerId = null;
+    if (this.tune.camStyle === 1 && this.state === 'playing') {
+      // TAP singkat (bukan drag orbit) = lompat
+      const held = this.time - this.pointerDownT;
+      const moved = Math.hypot(this.pointerX - this.pointerStart, this.pointerY - this.pointerStartY);
+      if (held < 0.26 && moved < 14) {
+        this.pressJump();
+        this.releaseJump();
+      }
+      return;
+    }
     this.releaseJump();
+  };
+  /** SEKIRO: scroll = zoom orbit (0.55–2.2) */
+  private onWheel = (e: WheelEvent) => {
+    if (this.tune.camStyle !== 1 || this.state !== 'playing') return;
+    const o = this.orbit;
+    o.zoom = clamp(o.zoom * (1 - e.deltaY * 0.001), 0.55, 2.2);
+    o.lastInput = this.time;
   };
 
   private onResize = () => {
@@ -607,6 +676,7 @@ export class Game {
     el.addEventListener('pointermove', this.onPointerMove);
     window.addEventListener('pointerup', this.onPointerUp);
     window.addEventListener('pointercancel', this.onPointerUp);
+    el.addEventListener('wheel', this.onWheel, { passive: true });
     window.addEventListener('resize', this.onResize);
     if ('ResizeObserver' in window) {
       this.ro = new ResizeObserver(() => this.onResize());
@@ -664,12 +734,38 @@ export class Game {
     }
   }
 
+  /** ganti mode kamera: 0 = Klasik · 1 = Sekiro · 2 = Sword of the Sea */
+  setCamStyle(s: number) {
+    const style = clamp(Math.round(s), 0, 2);
+    if (style === clamp(Math.round(this.tune.camStyle), 0, 2)) return;
+    this.setTune({ camStyle: style });
+    const names = ['KAMERA KLASIK', 'KAMERA SEKIRO ✦', 'SWORD OF THE SEA ✦'];
+    const descs = [
+      'samping-belakang kanan, FOV melebar saat ngebut',
+      'drag = orbit · scroll = zoom · lock-on kristal (menapak)',
+      'drone sinematik lebar yang menyapu vista',
+    ];
+    this.popup(names[style], descs[style], 'cyan');
+  }
+
   setTune(t: Partial<Tune>) {
     const prevPal = this.tune.palette;
+    const prevWorld = this.tune.worldMode;
     this.tune = { ...this.tune, ...t };
     if (t.palette !== undefined && t.palette !== prevPal) {
       this.mood.set(PALETTES[this.tune.palette]);
       this.audio.chime(3, 0.14);
+    }
+    // Mode dunia diganti → bangkitkan ulang medan & dekorasi biome SEKETIKA.
+    // Terrain f(x,z) murni → cukup invalidate cache, segalanya konsisten lagi.
+    if (t.worldMode !== undefined && Math.round(t.worldMode) !== Math.round(prevWorld)) {
+      setWorldMode(t.worldMode);
+      this.terrain.invalidate();
+      this.biomeScenery.respawnAll(this.pos.x, this.pos.z);
+      this.audio.chime(4, 0.18);
+      const names = ['PETUALANGAN', 'GURUN PASIR', 'NGARAI MERAH', 'RERUNTUHAN KUIL'];
+      const nm = names[Math.round(Math.max(0, Math.min(3, t.worldMode)))];
+      this.popup('DUNIA: ' + nm, 'medan terbangun ulang', 'cyan');
     }
   }
 
@@ -758,6 +854,7 @@ export class Game {
     this.trailWake.reset(this.t1.copy(this.pos), -fz, fx, 0.28);
     this.trailScarf.reset(this.t1.copy(this.pos), -fz, fx, 0.08);
     this.trailAir.reset(this.t1.copy(this.pos), -fz, fx, 0.12);
+    this.trailSword.reset(this.t1.copy(this.pos), -fz, fx, 0.15);
     this.popup('AIR TERJUN', `${Math.round(f.drop)} m di depan · ikuti sungai`, 'cyan');
     this.audio.chime(6, 0.18);
   }
@@ -785,7 +882,8 @@ export class Game {
     const rising = Math.max(0, this.lastGroundVy);
 
     // full carry of the slope's upward speed
-    let vy = (18 + sp * 0.16) * T.jumpPower + rising * T.launchBoost;
+    // (pop dasar direndahkan — lompat tidak lagi terlalu tinggi)
+    let vy = (14.5 + sp * 0.16) * T.jumpPower + rising * T.launchBoost;
 
     // crest / mound detection
     const onMound = isOnMound(this.pos.x, this.pos.z);
@@ -794,8 +892,8 @@ export class Game {
     const crest = rising > 3 && ahead < here - 0.3;
 
     if (onMound || rising > 7) {
-      // Big Alto-style kicker launch!
-      vy = Math.max(vy, (23 + sp * 0.22) * T.jumpPower + rising * 1.3);
+      // Big Alto-style kicker launch! (masih besar, tapi tidak melambung gila)
+      vy = Math.max(vy, (18.5 + sp * 0.22) * T.jumpPower + rising * 1.3);
       const pts = Math.round(180 * this.mult());
       this.popup('GUNDUKAN AIR JUMP! ✦', `Lompatan Indah · +${pts}`, 'gold');
       this.score += pts;
@@ -838,8 +936,8 @@ export class Game {
     this.jumpedThisAir = true;
     // costs a little flow if you have it, but never blocks the jump
     this.flow = clamp(this.flow - 6, 0, 100);
-    // air jump: a fresh, strong pop from wherever you are (even while falling)
-    this.vel.y = Math.max(this.vel.y, 0) * 0.35 + 20 * this.tune.airJumpPower;
+    // air jump: pop baru yang tidak terlalu tinggi dari posisi apa pun (bahkan saat jatuh)
+    this.vel.y = Math.max(this.vel.y, 0) * 0.35 + 14 * this.tune.airJumpPower;
     this.airJumpFlash = 1;
     this.popup('AIR JUMP INDAH! ✦', 'Gaya Melayang', 'cyan');
     this.audio.whoosh(1.15);
@@ -965,6 +1063,7 @@ export class Game {
     window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('pointerup', this.onPointerUp);
     window.removeEventListener('pointercancel', this.onPointerUp);
+    this.renderer.domElement.removeEventListener('wheel', this.onWheel);
     window.removeEventListener('resize', this.onResize);
     this.ro?.disconnect();
     this.audio.dispose();
@@ -978,6 +1077,7 @@ export class Game {
   private resetPlayer() {
     // every run starts somewhere new on the endless mountain => a fresh chasm layout
     setRunStart(Math.floor(Math.random() * 40) * 1500 + 500);
+    setWorldMode(this.tune.worldMode);
     this.terrain.invalidate();
     this.decorated.clear();
     this.lastCleared = -1;
@@ -988,6 +1088,7 @@ export class Game {
     const s = findStart();
     this.groundY = this.surfaceY(s.x, s.z);
     this.pos.set(s.x, this.groundY + this.hoverH(), s.z);
+    this.biomeScenery.respawnAll(this.pos.x, this.pos.z);
     this.prevGroundInit = false;
     this.groundVy = 0;
     this.prevWZ = s.z;
@@ -1000,6 +1101,9 @@ export class Game {
     this.airTime = 0;
     this.spinAngle = 0;
     this.spinVel = 0;
+    this.camHeading = this.yaw;
+    this.camHeadingInit = true;
+    this.clearLift = 0;
     this.air.resetAngles();
     this.air.chain = 0;
     this.air.chainTimer = 0;
@@ -1015,6 +1119,7 @@ export class Game {
     this.trailWake.reset(this.t1.copy(this.pos).setY(this.pos.y + 0.1), -fz, fx, 0.28);
     this.trailScarf.reset(this.t1.copy(this.pos).setY(this.pos.y + 1.7), -fz, fx, 0.08);
     this.trailAir.reset(this.t1.copy(this.pos).setY(this.pos.y + 1), -fz, fx, 0.12);
+    this.trailSword.reset(this.t1.copy(this.pos).setY(this.pos.y + 0.6), -fz, fx, 0.15);
     for (const sp of this.sparks) sp.active = false;
     for (let i = 0; i < 7; i++) this.spawnRun();
     this.updateRider(0.016);
@@ -1214,7 +1319,8 @@ export class Game {
     if (this.keys.has('ArrowLeft') || this.keys.has('KeyA')) key -= 1;
     if (this.keys.has('ArrowRight') || this.keys.has('KeyD')) key += 1;
     if (key !== 0) this.steerTarget = key;
-    else if (this.pointerId !== null) this.steerTarget = clamp((this.pointerX - this.pointerStart) / 80, -1, 1);
+    else if (this.pointerId !== null && this.tune.camStyle !== 1)
+      this.steerTarget = clamp((this.pointerX - this.pointerStart) / 80, -1, 1);
     else this.steerTarget = 0;
     this.steer += (this.steerTarget - this.steer) * (1 - Math.exp(-dt * 10 * this.tune.turn));
 
@@ -1325,7 +1431,7 @@ export class Game {
         poseW: 0,
       });
       this.rig.apply(this.rider.group, this.pos.x, this.pos.z, 0, this.grounded, { tilt: this.tune.tilt });
-      for (const t of [this.trailGlow, this.trailWake, this.trailScarf, this.trailAir]) t.tick(dt);
+      for (const t of [this.trailGlow, this.trailWake, this.trailScarf, this.trailAir, this.trailSword]) t.tick(dt);
       this.rider.tail.getWorldPosition(this.t3);
       if (this.rig.clearance < this.hoverH() + 0.6) {
         this.trailGlow.push(this.t3, -fz, fx, 0.18 * this.tune.trails);
@@ -1355,6 +1461,7 @@ export class Game {
     this.monoliths.update(this.pos.x, this.pos.z, fx, fz, this.time);
     this.speedPads.update(this.pos.z, dt);
     this.energyCrystals.update(this.pos.z, this.time);
+    this.biomeScenery.update(this.pos.x, this.pos.z);
     this.sky.mesh.position.copy(this.camera.position);
     // clouds ride with the camera height too (the world descends forever)
     this.clouds.group.position.set(this.camera.position.x, this.camera.position.y - 40, this.camera.position.z);
@@ -1938,6 +2045,8 @@ export class Game {
     this.trailAir.mul = g;
     // Character scarf trail capped and reduced by 70%
     this.trailScarf.mul = Math.min(0.08, (T.scarfGlow ? g : 0) * 0.1);
+    // Ekor pedang putih: putih bersih, sedikit dibaur warna kabut mood (non-additif = bebas silau)
+    this.trailSword.setColor(this.cc.set(0xf6faff).lerp(this.eff.fog, 0.2));
     // ground ripples + floating motes
     this.ripples.mul = Math.min(0.6, (0.2 + 0.35 * glare) * 0.4);
     this.motes.setIntensity(T.motes * glare * 0.3);
@@ -2264,9 +2373,9 @@ export class Game {
     // ---- hover rig + visuals (uses REAL dt so filtering never depends on slow-mo)
     this.updateRider(rawDt);
 
-    // ---- ground fx
+    // ---- ground fx: pasir gurun beterbangan di belakang bilah
     if (this.grounded) {
-      const rate = (3 + speed * 0.85 + this.slipNorm * 26) * T.particles;
+      const rate = (10 + speed * 2.1 + this.slipNorm * 46) * T.particles;
       this.dustAcc += rate * rawDt;
       while (this.dustAcc >= 1) {
         this.dustAcc -= 1;
@@ -2380,7 +2489,7 @@ export class Game {
     const fz = Math.cos(this.rig.yaw);
     const rn = -fz;
     const sn = fx;
-    for (const t of [this.trailGlow, this.trailWake, this.trailScarf, this.trailAir]) t.tick(dt);
+    for (const t of [this.trailGlow, this.trailWake, this.trailScarf, this.trailAir, this.trailSword]) t.tick(dt);
 
     this.rider.tail.getWorldPosition(this.t3);
     const trailW = T.trails;
@@ -2404,6 +2513,9 @@ export class Game {
       sn * 0.35,
       (this.grounded ? 0.02 : 0.12 + Math.min(0.2, Math.abs(this.spinVel) * 0.04)) * trailW,
     );
+    // Ekor putih halus di ujung pedang (seperti trail paus) — selalu mengalir,
+    // pendek & tipis supaya tidak menutupi debu pasir
+    this.trailSword.push(this.t3, rn, sn, (0.09 + Math.min(0.16, speed * 0.003)) * trailW);
 
     // ---- aura (circular light around character): reduced by 70% and hard-capped so it never blows out
     const auraMat = this.aura.material as THREE.SpriteMaterial;
@@ -2622,6 +2734,11 @@ export class Game {
   }
 
   // --------------------------------------------------------------------- fx
+  /**
+   * ROOSTER TAIL GURUN: pasir beterbangan indah di belakang hover sword.
+   * Tiga lapis — butir pasir yang melengkung cepat, kabut debu besar yang
+   * melayang lembut, dan kilau butir halus yang tertangkap cahaya.
+   */
   private emitSand() {
     this.rider.tail.getWorldPosition(this.t1);
     const v = this.vel;
@@ -2646,22 +2763,91 @@ export class Game {
       );
       return;
     }
-    this.dust.spawn(
-      this.t1.x + (Math.random() - 0.5) * 1.2,
-      this.groundY + 0.15 + Math.random() * 0.4,
-      this.t1.z + (Math.random() - 0.5) * 1.2,
-      -v.x * back + (Math.random() - 0.5) * 5,
-      1.5 + Math.random() * 5 + Math.abs(v.y) * 0.1,
-      -v.z * back + (Math.random() - 0.5) * 5,
-      0.4 + Math.random() * 0.9,
-      0.5 + Math.random() * 0.8,
-      0.95,
-      0.82,
-      0.66,
-      0.4,
-      -13,
-      1.7,
-    );
+
+    const speed = Math.hypot(v.x, v.z);
+    const fx = Math.sin(this.rig.yaw);
+    const fz = Math.cos(this.rig.yaw);
+    // semburat samping saat carving keras (sesuai arah tikungan)
+    const side = -this.steer * this.slipNorm;
+    const kick = 0.24 + Math.min(0.34, speed * 0.007) + this.slipNorm * 0.14;
+
+    const roll = Math.random();
+    if (roll < 0.55) {
+      // 1. BUTIR PASIR HALUS di sekitar bilah: kecil, banyak, melengkung —
+      //    ini "tekstur" debunya, bukan gumpalan raksasa
+      const backOff = Math.random() * 2.4;
+      const edge = Math.random() < 0.5 ? (Math.random() < 0.5 ? -1 : 1) * (0.5 + Math.random() * 1.1) : 0;
+      const px = this.t1.x - fx * backOff - fz * edge + (Math.random() - 0.5) * 1.2;
+      const pz = this.t1.z - fz * backOff + fx * edge + (Math.random() - 0.5) * 1.2;
+      const py = this.surfaceY(px, pz) + 0.12 + Math.random() * 0.4;
+      const vx = -v.x * kick + -fz * (side * speed * 0.08 + edge * 2.2) + (Math.random() - 0.5) * 4.5;
+      const vz = -v.z * kick + fx * (side * speed * 0.08 + edge * 2.2) + (Math.random() - 0.5) * 4.5;
+      this.dust.spawn(
+        px,
+        py,
+        pz,
+        vx * 1.15,
+        2.6 + Math.random() * 4.5 + speed * 0.06,
+        vz * 1.15,
+        0.18 + Math.random() * 0.3,
+        0.6 + Math.random() * 0.6,
+        1.0,
+        0.88,
+        0.66,
+        0.75,
+        -17,
+        1.0,
+      );
+    } else if (roll < 0.88) {
+      // 2. ASAP DEBU: puff SEDANG jauh di belakang rider (1.8–7.4 m). Makin jauh
+      //    dari kamera, makin kecil di layar — membentuk GARIS ASAP yang indah &
+      //    natural, bukan bola-bola raksasa yang menabrak lensa.
+      const backOff = 1.8 + Math.random() * 5.6;
+      const edge = (Math.random() - 0.5) * (0.8 + backOff * 0.35);
+      const px = this.t1.x - fx * backOff - fz * edge + (Math.random() - 0.5) * 1.6;
+      const pz = this.t1.z - fz * backOff + fx * edge + (Math.random() - 0.5) * 1.6;
+      const py = this.surfaceY(px, pz) + 0.25 + Math.random() * 0.8;
+      const vx = -v.x * kick * 0.5 + -fz * side * speed * 0.04 + (Math.random() - 0.5) * 2.2;
+      const vz = -v.z * kick * 0.5 + fx * side * speed * 0.04 + (Math.random() - 0.5) * 2.2;
+      this.dust.spawn(
+        px,
+        py,
+        pz,
+        vx,
+        1.0 + Math.random() * 1.8 + this.slipNorm * 1.2,
+        vz,
+        0.55 + Math.random() * 0.75,
+        1.6 + Math.random() * 1.3,
+        0.94,
+        0.84,
+        0.67,
+        0.15 + Math.random() * 0.09,
+        -1.0,
+        2.4,
+      );
+    } else {
+      // 3. kilau butir halus tertangkap cahaya matahari
+      const backOff = Math.random() * 2.0;
+      const px = this.t1.x - fx * backOff + (Math.random() - 0.5) * 1.4;
+      const pz = this.t1.z - fz * backOff + (Math.random() - 0.5) * 1.4;
+      const py = this.surfaceY(px, pz) + 0.15 + Math.random() * 0.5;
+      this.dust.spawn(
+        px,
+        py,
+        pz,
+        -v.x * kick * 1.3 + (Math.random() - 0.5) * 3,
+        3.5 + Math.random() * 4,
+        -v.z * kick * 1.3 + (Math.random() - 0.5) * 3,
+        0.14 + Math.random() * 0.18,
+        0.45 + Math.random() * 0.4,
+        1.0,
+        0.98,
+        0.9,
+        0.55,
+        -13,
+        1.0,
+      );
+    }
   }
 
   private emitDust(at: THREE.Vector3, n: number, power: number) {
@@ -2711,46 +2897,188 @@ export class Game {
   }
 
   // ----------------------------------------------------------------- camera
+  /**
+   * Sistem kamera "desired → smoothed" (3 mode — tombol 1/2/3):
+   *   1. hitung posisi ideal (desired) & titik pandang ideal (look) sesuai mode
+   *   2. koreksi supaya tidak tertutup terrain (avoidTerrain — dinaikkan, bukan dipotong)
+   *   3. lerp camPos → desired (kPos) · lookSmooth → look (kLook), semua 1-exp(-dt·k)
+   *   4. lerp FOV & roll, lalu camera.lookAt(look)
+   * Karena camPos/camLook/fov/roll persisten & selalu di-lerp, ganti mode TIDAK
+   * pernah cut — kamera meluncur mulus ke posisi mode baru.
+   */
   private updateCamera(dt: number) {
     const T = this.tune;
     const speed = Math.hypot(this.vel.x, this.vel.z);
     const sn = clamp(speed / 72, 0, 1);
-    const fx = Math.sin(this.rig.yaw);
-    const fz = Math.cos(this.rig.yaw);
+
+    // ===================== DRONE HEADING (kamera cerdas) =====================
+    // Rider diperlakukan seperti BOLA / mobil yang diikuti drone: arah kamera
+    // ditentukan dari ARAH LUNCUR bola (velocity), bukan dari arah badan rider.
+    // Spin/flip freestyle tidak merubah velocity → layar TIDAK ikut muter.
+    // Di darat responsif (ngikutin carving), di udara/trik extra tenang.
+    const tricking =
+      Math.abs(this.air.flipVel) > 2.5 || Math.abs(this.air.spinVel) > 2.5 || this.air.board.active;
+    let headTgt = this.yaw;
+    if (speed > 6) headTgt = Math.atan2(this.vel.x, this.vel.z);
+    if (!this.camHeadingInit) {
+      this.camHeading = headTgt;
+      this.camHeadingInit = true;
+    }
+    let dh = headTgt - this.camHeading;
+    while (dh > Math.PI) dh -= Math.PI * 2;
+    while (dh < -Math.PI) dh += Math.PI * 2;
+    const kHead = this.grounded ? (tricking ? 2.0 : 4.5) : 1.5;
+    this.camHeading += dh * (1 - Math.exp(-dt * kHead));
+    const fx = Math.sin(this.camHeading);
+    const fz = Math.cos(this.camHeading);
+    const mode = clamp(Math.round(T.camStyle), 0, 2);
+    // set oleh cabang 'playing' di bawah
+    let swayScale = 1;
+    let fovOverride: number | null = null;
+    let rollOverride: number | null = null;
     // the camera glides on the smoothed rail, so bumps never shake the frame
     const glideY = this.rig.cameraY(dt, 2.6 + T.camLag * 2.2);
+    this.lockCooldown = Math.max(0, this.lockCooldown - dt);
 
     if (this.state === 'menu') {
       const a = this.time * 0.14;
       this.t2.set(this.pos.x + Math.sin(a) * 15, glideY + 5.4 + Math.sin(a * 0.7) * 1.2, this.pos.z + Math.cos(a) * 15);
       this.camPos.lerp(this.t2, 1 - Math.exp(-dt * 3));
       this.lookSmooth.lerp(this.t1.set(this.pos.x, glideY + 1.8, this.pos.z), 1 - Math.exp(-dt * 4));
+      this.lockRing.visible = false;
     } else if (this.state === 'over') {
       // camera stops at the edge and watches the rider tumble into the abyss
       this.lookSmooth.lerp(this.pos, 1 - Math.exp(-dt * 4));
+      this.lockRing.visible = false;
     } else {
-      const dist = (10.5 + sn * 4.6 + (this.boosting ? 1.8 : 0) + clamp(this.airTime * 1.1, 0, 2)) * T.camDist;
-      const camX = this.pos.x - fx * dist;
-      const camZ = this.pos.z - fz * dist;
-      const camGround = smoothHeight(camX, camZ, 6);
-      const camHeight = 4.4 + sn * 1.3 + clamp(this.airTime * 0.8, 0, 2.0);
-      const camY = Math.max(glideY + camHeight, camGround + 3.2);
-      this.t2.set(camX, camY, camZ);
-      this.camPos.lerp(this.t2, 1 - Math.exp(-dt * (2.8 + T.camLag * 2.6)));
+      // ============================ PLAYING: mode 0 Klasik · 1 Sekiro · 2 Sword of the Sea
+      const px = this.pos.x;
+      const py = this.pos.y;
+      const pz = this.pos.z;
+      const lean = this.steer; // -1..1 kemiringan rider saat belok
+      const air = Math.min(this.airTime, 2.2);
+      const kMul = T.camLag / 1.15; // slider "kelembutan kamera" mengalikan semua k
+      let kPos = 3.5;
+      let kLook = 5;
+      let clearance = 2.0;
 
-      // Look target follows the steep downhill terrain ahead (looks DOWN the mountain!)
-      const lookDist = 18 + sn * 14;
-      const aheadX = this.pos.x + fx * lookDist;
-      const aheadZ = this.pos.z + fz * lookDist;
-      const aheadGround = smoothHeight(aheadX, aheadZ, 6);
-      // Looking down into the mountain slope creates the true steep downhill sensation
-      this.t3.set(aheadX, aheadGround + 1.8 + sn * 0.6, aheadZ);
-      this.lookSmooth.lerp(this.t3, 1 - Math.exp(-dt * (3.4 + T.camLag * 3)));
+      if (mode === 0) {
+        // ---------------- KLASIK ----------------
+        // diam di samping-belakang kanan; makin cepat → mundur & FOV melebar
+        kPos = 3.5;
+        kLook = 5;
+        swayScale = 0.6;
+        const back = (9 + 2.5 * sn) * T.camDist;
+        const side = 7.5 + sn;
+        this.t2.set(px + -fz * side - fx * back, py + 5 + 1.5 * sn, pz + fx * side - fz * back);
+        this.t3.set(px + fx * 7, py + 1.2, pz + fz * 7);
+        fovOverride = 55 + (10 * sn + (this.boosting ? 4 : 0)) * (T.fov / 0.95);
+        rollOverride = -0.05 * lean;
+        this.lockRing.visible = false;
+      } else if (mode === 1) {
+        // ---------------- SEKIRO ----------------
+        // over-the-shoulder + orbit (drag/scroll) + auto lock-on kristal energi
+        kPos = 14;
+        kLook = 16;
+        clearance = 0.7;
+        swayScale = 0.35;
+        const o = this.orbit;
+        this.updateLockOn();
+        const idle = this.time - o.lastInput > 1.4;
+        if (this.lockTarget) {
+          // yaw diarahkan ke target (frame rider) & pitch ke 0.2 — khas Sekiro:
+          // rider DAN target sama-sama masuk frame
+          const lt = this.lockTarget;
+          let rel = Math.atan2(lt.x - px, lt.z - pz) - this.camHeading;
+          rel = Math.atan2(Math.sin(rel), Math.cos(rel));
+          const yawTgt = clamp(rel * 0.6, -0.9, 0.9);
+          o.yaw += (yawTgt - o.yaw) * (1 - Math.exp(-dt * 2.5));
+          o.pitch += (0.2 - o.pitch) * (1 - Math.exp(-dt * 3));
+        } else if (idle) {
+          // tidak ada input > 1.4 dtk → auto re-center pelan
+          o.yaw += (0 - o.yaw) * (1 - Math.exp(-dt * 1.3));
+          o.pitch += (0.14 - o.pitch) * (1 - Math.exp(-dt * 1.3));
+        }
+        const az = this.camHeading + Math.PI + o.yaw;
+        const cosP = Math.cos(o.pitch);
+        const dist = 5.4 * o.zoom * T.camDist + (!this.grounded ? 0.8 : 0);
+        const shoulder = 0.85; // offset ke kanan → rider di kiri frame
+        this.t2.set(
+          px + Math.sin(az) * dist * cosP + Math.cos(az) * shoulder,
+          py + 1.9 + Math.sin(o.pitch) * dist,
+          pz + Math.cos(az) * dist * cosP - Math.sin(az) * shoulder,
+        );
+        // look: 3.5 m ke arah depan kamera + offset bahu; campur target 0.35 bila lock
+        this.t3.set(
+          px - Math.sin(az) * 3.5 + Math.cos(az) * shoulder * 0.55,
+          py + 1.05,
+          pz - Math.cos(az) * 3.5 - Math.sin(az) * shoulder * 0.55,
+        );
+        if (this.lockTarget) {
+          const lt = this.lockTarget;
+          this.t3.lerp(this.t4.set(lt.x, lt.y + 0.6, lt.z), 0.35);
+          this.lockRing.visible = true;
+          this.lockRing.position.set(lt.x, lt.y + 0.6, lt.z);
+        } else this.lockRing.visible = false;
+        fovOverride = (50 + 4 * sn) * (0.6 + 0.4 * (T.fov / 0.75));
+        rollOverride = -0.04 * lean;
+      } else {
+        // ---------------- SWORD OF THE SEA (sinematik) ----------------
+        // rendah & lebar; sweep organik dua sinus; rule of thirds; dutch angle
+        kPos = 1.8;
+        kLook = 2.6;
+        swayScale = 0.9;
+        const sweep = Math.sin(this.time * 0.11) * 0.75 + Math.sin(this.time * 0.037 + 1.3) * 0.45;
+        const cyaw = this.camHeading + Math.PI + sweep + lean * 0.15;
+        const dist = (15 + 5 * sn + 5 * air) * T.camDist;
+        const height = 2.4 + 0.8 * sn + 3.2 * air;
+        this.t2.set(px + Math.sin(cyaw) * dist, py + height, pz + Math.cos(cyaw) * dist);
+        const lat = -1.5 * lean - 2 * Math.sin(sweep + lean * 0.25); // rider jatuh di sepertiga frame
+        this.t3.set(
+          px + fx * 14 + Math.cos(cyaw) * lat,
+          py + 1 + 0.8 * air,
+          pz + fz * 14 - Math.sin(cyaw) * lat,
+        );
+        fovOverride = 74 + 10 * sn * (T.fov / 0.75);
+        rollOverride = -0.07 * lean + 0.015 * Math.sin(this.time * 0.17);
+        this.lockRing.visible = false;
+      }
+
+      // ============================ avoidTerrain ============================
+      // clearance minimal di atas terrain; sampel 3 titik garis kamera→rider
+      // (30%, 55%, 80%): jika ada punggung bukit di atas garis pandang, kamera
+      // DINAIKKAN need/f supaya garis bebas — bukan dipotong jaraknya.
+      // Lift di-haluskan: NAIK cepat (kamera tak pernah tembus bukit), TURUN
+      // pelan (landing setelah loncat tidak disertai jatuh vertikal mendadak).
+      const rawY = this.t2.y;
+      const g0 = smoothHeight(this.t2.x, this.t2.z, 6) + clearance;
+      if (this.t2.y < g0) this.t2.y = g0;
+      for (const f of [0.3, 0.55, 0.8]) {
+        const lx = px + (this.t2.x - px) * f;
+        const lz = pz + (this.t2.z - pz) * f;
+        const ly = py + (this.t2.y - py) * f;
+        const need = smoothHeight(lx, lz, 6) + clearance - ly;
+        if (need > 0) this.t2.y += need / f;
+      }
+      const lift = this.t2.y - rawY;
+      const kLift = lift > this.clearLift ? 12 : 1.6;
+      this.clearLift += (lift - this.clearLift) * (1 - Math.exp(-dt * kLift));
+      this.t2.y = rawY + this.clearLift;
+
+      // ============================ lerp desired ============================
+      this.camPos.lerp(this.t2, 1 - Math.exp(-dt * kPos * kMul));
+      this.lookSmooth.lerp(this.t3, 1 - Math.exp(-dt * kLook * kMul));
     }
-    this.camLook.lerp(this.lookSmooth, 1 - Math.exp(-dt * 9));
+    this.camLook.lerp(this.lookSmooth, 1 - Math.exp(-dt * 14));
+
+    // reticle lock-on: billboard menghadap kamera + denyut lembut
+    if (this.lockRing.visible) {
+      this.lockRing.quaternion.copy(this.camera.quaternion);
+      this.lockRing.scale.setScalar(1 + Math.sin(this.time * 6) * 0.08);
+    }
 
     // smooth sinusoidal sway (never per-frame random -> no shimmer)
-    const swayAmt = this.state === 'menu' ? 0.12 : 0.05 + sn * 0.08;
+    const swayAmt = (this.state === 'menu' ? 0.12 : 0.05 + sn * 0.08) * swayScale;
     const sx = Math.sin(this.time * 0.83) * swayAmt + Math.sin(this.time * 2.1) * swayAmt * 0.28;
     const sy = Math.sin(this.time * 1.27) * swayAmt * 0.7 + Math.sin(this.time * 2.7) * swayAmt * 0.22;
     const sz = Math.cos(this.time * 0.69) * swayAmt;
@@ -2765,11 +3093,13 @@ export class Game {
     this.camera.up.copy(UP);
     this.camera.lookAt(this.camLook);
 
-    const rollTarget = this.state === 'menu' ? 0 : this.steer * 0.06 + this.slipNorm * this.steer * 0.06;
+    const rollTarget =
+      rollOverride ?? (this.state === 'menu' ? 0 : this.steer * 0.06 + this.slipNorm * this.steer * 0.06);
     this.camRoll += (rollTarget - this.camRoll) * (1 - Math.exp(-dt * 3.6));
     this.camera.rotateZ(this.camRoll);
 
-    const fovTarget = 63 + sn * 13 * T.fov + (this.boosting ? 5 * T.fov : 0) + clamp(-this.vel.y * 0.3, -2, 5);
+    const fovTarget =
+      fovOverride ?? 63 + sn * 13 * T.fov + (this.boosting ? 5 * T.fov : 0) + clamp(-this.vel.y * 0.3, -2, 5);
     this.camFov += (fovTarget - this.camFov) * (1 - Math.exp(-dt * 2.8));
     this.camera.fov = this.camFov;
     this.camera.updateProjectionMatrix();
@@ -2779,6 +3109,49 @@ export class Game {
     // master glare level scales the bloom cleanly without blinding blowout (reduced by 70%)
     const target = (this.mood.bloom * T.bloom * 0.3 + dyn * 0.3) * Math.min(1.0, T.glare);
     this.bloomPass.strength += (target - this.bloomPass.strength) * (1 - Math.exp(-dt * 4));
+  }
+
+  /**
+   * Lock-on Sekiro: kandidat = kristal energi. Valid jika 6–420 m di depan rider.
+   * Skor = lat²·0.5 + fwd² → mengutamakan yang lurus di depan. Target hilang saat
+   * terlewati/terkoleksi → otomatis cari berikutnya.
+   */
+  private updateLockOn() {
+    if (this.lockCooldown > 0) return;
+    // DRONE RULE: lock-on kamera hanya saat menapak & tidak trik. Saat loncat /
+    // freestyle kamera tetap netral menghadap arah luncur — tidak ada swing
+    // mendadak ke kristal yang bikin layar "muter / nyorot ga jelas".
+    const tricking =
+      Math.abs(this.air.flipVel) > 2.5 || Math.abs(this.air.spinVel) > 2.5 || this.air.board.active;
+    if (!this.grounded || tricking) {
+      this.lockTarget = null;
+      return;
+    }
+    const fx = Math.sin(this.camHeading);
+    const fz = Math.cos(this.camHeading);
+    const cur = this.lockTarget;
+    if (cur && !cur.collected) {
+      const ddx = cur.x - this.pos.x;
+      const ddz = cur.z - this.pos.z;
+      const fwd = ddx * fx + ddz * fz;
+      if (fwd > -2 && fwd < 420) return; // masih valid — pertahankan
+    }
+    let best: typeof cur = null;
+    let bestScore = Infinity;
+    for (const c of this.energyCrystals.lockCandidates()) {
+      if (c.collected) continue;
+      const ddx = c.x - this.pos.x;
+      const ddz = c.z - this.pos.z;
+      const fwd = ddx * fx + ddz * fz;
+      if (fwd < 6 || fwd > 420) continue;
+      const lat = ddx * fz - ddz * fx;
+      const score = lat * lat * 0.5 + fwd * fwd;
+      if (score < bestScore) {
+        bestScore = score;
+        best = c;
+      }
+    }
+    this.lockTarget = best;
   }
 }
 
