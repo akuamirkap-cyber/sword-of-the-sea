@@ -110,6 +110,9 @@ export interface Tune {
   swordSize: number;
   swordGlow: number; // pencahayaan & pendar pedang skate (0 = redup, 1 = pendar lembut normal)
 
+  // ---- AURORA (tirai cahaya polar di langit)
+  aurora: number; // 0 = mati · 1 = normal · 2 = super gemilang
+
   // ---- SKY WHALES
   whales: number; // count 0..6
   whaleSize: number;
@@ -288,6 +291,7 @@ export const DEFAULT_TUNE: Tune = {
   swordSize: 0.68,
   swordGlow: 0.18, // pencahayaan pedang teredam 70% (sejuk & proporsional)
 
+  aurora: 1, // aktif normal — warna otomatis mengikuti palet langit
   whales: 3,
   whaleSize: 1.6,
   whaleHeight: 1,

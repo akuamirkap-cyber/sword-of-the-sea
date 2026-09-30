@@ -38,6 +38,7 @@ import { TerrainField } from './terrain';
 import { Motes, Particles, Ripples, TrailRibbon, WindStreaks, makeGlowTexture, makeSoftDiscTexture } from './fx';
 import { buildRider } from './model';
 import { BiomeScenery, CloudLayer, Monoliths, SkyDome, SpeedPads, EnergyCrystals, getMountainSector } from './world';
+import { Aurora } from './aurora';
 import { AudioEngine } from './audio';
 import { PALETTES, blendPalettes, type Palette } from './palette';
 import { DEFAULT_TUNE, SWORD_SKINS, type Tune } from './tune';
@@ -249,6 +250,7 @@ export class Game {
   private bloomPass!: UnrealBloomPass;
   private fog: THREE.FogExp2;
   private sky = new SkyDome();
+  private aurora = new Aurora();
   private clouds = new CloudLayer();
   private sun = new THREE.DirectionalLight(0xffcf9a, 1.7);
   private hemi = new THREE.HemisphereLight(0xa8ccff, 0xe2a97a, 1.05);
@@ -508,6 +510,7 @@ export class Game {
     this.scene.add(this.bounceLight);
 
     this.scene.add(this.sky.mesh);
+    this.scene.add(this.aurora.mesh); // tirai aurora: tepat di depan sky dome
     this.scene.add(this.clouds.group);
     this.scene.add(this.terrain.mesh);
     this.scene.add(this.monoliths.group);
@@ -1315,6 +1318,8 @@ export class Game {
 
     // ---------- sky dome
     this.sky.apply(e.top, e.mid, e.hor, e.low, e.sunTint, m.glow * T.skyGlow, m.stars, this.lightDir);
+    // ---------- aurora: warna tirai menyesuaikan palet langit yang sedang aktif
+    this.aurora.applyMood(e.top, e.hor, m.stars, m.glow, T.aurora);
 
     // ---------- atmosphere (advanced fog)
     if (T.fogCustom) e.fog.set(T.fogC);
@@ -1633,6 +1638,8 @@ export class Game {
     this.energyCrystals.update(this.pos.z, this.time);
     this.biomeScenery.update(this.pos.x, this.pos.z);
     this.sky.mesh.position.copy(this.camera.position);
+    this.aurora.mesh.position.copy(this.camera.position);
+    this.aurora.update(this.time);
     // clouds ride with the camera height too (the world descends forever)
     this.clouds.group.position.set(this.camera.position.x, this.camera.position.y - 40, this.camera.position.z);
     this.chasmMarkers.update(this.pos.z, this.time);

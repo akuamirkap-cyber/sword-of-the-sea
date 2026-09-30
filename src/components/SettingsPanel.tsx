@@ -436,6 +436,15 @@ export function SettingsPanel({
                 ))}
               </div>
               <Toggle label="putar waktu otomatis" on={l.cycle} onChange={(v) => set({ cycle: v })} />
+              <Slider
+                label="aurora ✦"
+                hint="tirai cahaya polar — warnanya otomatis menyesuaikan palet langit"
+                value={l.aurora}
+                min={0}
+                max={2}
+                onChange={(v) => set({ aurora: v })}
+                fmt={(v) => (v === 0 ? 'mati' : v < 0.8 ? 'samar' : v < 1.4 ? 'normal' : 'gemilang')}
+              />
 
               <div className="mt-6 text-[9px] font-semibold uppercase tracking-[0.3em] text-sand-200/60">
                 🐋 paus langit
