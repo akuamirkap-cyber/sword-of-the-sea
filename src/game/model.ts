@@ -29,6 +29,10 @@ export interface RiderAnim {
   height: number;
   head: number;
   sword: number;
+  /** 0 = humanoid kristal · 1 = SLUGPUP penuh (Rain World): badan siput
+   *  bulat tanpa leher, kepala besar mata hitam, lengan kurus, kaki tebal,
+   *  telinga bulat — morph di-blend mulus. */
+  pup: number;
   // ---- skate tricks
   boardRoll: number;
   boardYaw: number;
@@ -53,7 +57,6 @@ export interface Rider {
   animate: (dt: number, a: RiderAnim) => void;
   impulse: (strength: number) => void;
   setEnv: (tex: THREE.Texture) => void;
-  setPup: (on: boolean) => void; // mode slugpup: mata gelap tampak
 }
 
 // ============================================================ grab poses
@@ -496,31 +499,41 @@ export function buildRider(): Rider {
   const neck = new THREE.Object3D();
   body.add(neck);
 
-  // ---- SLUGPUP (Rain World): mata gelap + jangkar ekor panjang di pangkal punggung
+  // ---- SLUGPUP (Rain World): mata hitam bulat + telinga bulat + jangkar
+  // ekor panjang tebal di pangkal punggung. Semuanya di-blend lewat a.pup.
   const eyes = new THREE.Group();
   {
     const eyeGeo = new THREE.SphereGeometry(0.021, 14, 10);
     const eyeMat = new THREE.MeshStandardMaterial({
-      color: 0x161a24,
+      color: 0x10131b,
       roughness: 0.22,
       metalness: 0.15,
       emissive: new THREE.Color(0x05070c),
     });
     const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
-    eyeL.position.set(-0.038, 0.012, 0.086);
+    eyeL.position.set(-0.04, 0.012, 0.088);
     const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
-    eyeR.position.set(0.038, 0.012, 0.086);
+    eyeR.position.set(0.04, 0.012, 0.088);
     eyes.add(eyeL, eyeR);
     eyes.visible = false;
     head.add(eyes); // anak kepala → ikut semua gerakan kepala
   }
+  const ears = new THREE.Group();
+  {
+    const earGeo = new THREE.SphereGeometry(0.034, 16, 12);
+    const earL = new THREE.Mesh(earGeo, crystal);
+    earL.position.set(-0.062, 0.085, -0.005);
+    earL.scale.set(0.85, 1, 0.6);
+    const earR = new THREE.Mesh(earGeo, crystal);
+    earR.position.set(0.062, 0.085, -0.005);
+    earR.scale.set(0.85, 1, 0.6);
+    ears.add(earL, earR);
+    ears.visible = false;
+    head.add(ears);
+  }
   const tailBone = new THREE.Object3D();
   tailBone.position.set(0, -0.05, -0.11);
   body.add(tailBone);
-
-  function setPup(on: boolean) {
-    eyes.visible = on;
-  }
 
   group.scale.setScalar(1.18);
 
@@ -583,18 +596,36 @@ export function buildRider(): Rider {
     const k = (r: number) => 1 - Math.exp(-dt * r);
 
     // ---------------- proportions
+    // SLUGPUP MORPH (a.pup 0→1): kepala membesar & menyatu (leher hilang),
+    // badan membulat bentuk siput, lengan kurus, kaki tebal pendek — anatomi
+    // slugcat Rain World asli (mata hitam bulat + telinga bulat + ekor tebal).
+    const pup = clamp(a.pup, 0, 1);
     const s = clamp(a.sword, 0.35, 1.3);
     const h = clamp(a.height, 0.4, 1.15);
-    const legK = h;
-    const torsoK = 0.4 + 0.6 * h;
-    const armK = 0.32 + 0.68 * h;
-    const neckK = 0.45 + 0.55 * h;
+    const legK = h * (1 - 0.24 * pup); // kaki lebih pendek → pup selalu crouching
+    const torsoK = (0.4 + 0.6 * h) * (1 - 0.14 * pup);
+    const armK = (0.32 + 0.68 * h) * (1 - 0.22 * pup); // lengan kurus pendek
+    const neckK = (0.45 + 0.55 * h) * (1 - 0.86 * pup); // leher nyaris lenyap
     const girth = 1 + (1 - h) * 0.45;
-    const headK = clamp(a.head, 0.6, 2.4);
-    const footK = girth;
+    const headK = clamp(a.head, 0.6, 2.4) * (1 + 0.55 * pup); // kepala bulat besar
+    const armGirth = girth * (1 - 0.32 * pup); // lengan tipis + telapak kecil
+    const legGirth = girth * (1 + 0.55 * pup); // kaki belakang tebal
+    const footK = girth * (1 - 0.22 * pup); // ...dengan kaki (telapak) kecil
     const UAk = UA * armK;
     const FAk = FA * armK;
     const reach = (UAk + FAk) * 0.94;
+
+    // ---- aksesori & fitur fade sesuai bentuk (pup = tanpa pakaian)
+    const showOutfit = pup < 0.5;
+    belt.visible = showOutfit;
+    circlet.visible = showOutfit;
+    ponytail.visible = showOutfit;
+    cuffL.visible = showOutfit;
+    cuffR.visible = showOutfit;
+    ankL.visible = showOutfit;
+    ankR.visible = showOutfit;
+    eyes.visible = pup > 0.02;
+    ears.visible = pup > 0.02;
 
     // ---------------- grab pose crossfade (one style at a time)
     const want = a.pose && POSES[a.pose] ? a.pose : null;
@@ -675,11 +706,12 @@ export function buildRider(): Rider {
 
     pelvis.position.copy(pelvisP);
     pelvis.quaternion.copy(qBody);
-    pelvis.scale.set(1, 0.5 + 0.5 * torsoK, 1);
+    // badan siput: panggul & dada membulat tebal saat pup
+    pelvis.scale.set(1 + 0.4 * pup, 0.5 + 0.5 * torsoK, 1 + 0.46 * pup);
     lb(qBody, pelvisP, 0, 0.07 * torsoK, 0, v);
     torso.position.copy(v);
     torso.quaternion.copy(qSpine);
-    torso.scale.set(1, torsoK, 1);
+    torso.scale.set(1 + 0.42 * pup, torsoK, 1 + 0.52 * pup);
     lb(qSpine, v, 0, 0.36 * torsoK, 0.012, chestP);
     lb(qSpine, v, 0, 0.47 * torsoK, 0, neckBase);
 
@@ -761,10 +793,10 @@ export function buildRider(): Rider {
       const kn = si === 0 ? kneeL : kneeR;
       const an = si === 0 ? ankL : ankR;
       const ft = si === 0 ? footL : footR;
-      placeSeg(th, hipJ[si], mid, TH, girth);
-      placeSeg(sh, mid, end, SH, girth);
+      placeSeg(th, hipJ[si], mid, TH, legGirth);
+      placeSeg(sh, mid, end, SH, legGirth);
       kn.position.copy(mid);
-      kn.scale.setScalar(0.05 * girth);
+      kn.scale.setScalar(0.05 * legGirth);
       // feet follow the sword's orientation while attached
       qFootRest.setFromAxisAngle(yAxis, STANCE + (side < 0 ? -0.25 : 0.25));
       qFootAtt.copy(qBodyInv).multiply(qBoard).multiply(qFootRest);
@@ -786,7 +818,7 @@ export function buildRider(): Rider {
       const delt = si === 0 ? deltL : deltR;
       delt.position.copy(shoJ[si]);
       delt.quaternion.copy(qChest);
-      delt.scale.setScalar(girth);
+      delt.scale.setScalar(armGirth);
 
       const carve = a.steer * side;
       if (side < 0) dir.set(-0.62, -0.42 + carve * 0.18, 0.62);
@@ -833,20 +865,20 @@ export function buildRider(): Rider {
       const eb = si === 0 ? elbowL : elbowR;
       const hd = si === 0 ? handL : handR;
       const cf = si === 0 ? cuffL : cuffR;
-      placeSeg(ua, shoJ[si], mid, UA, girth);
-      placeSeg(fa, mid, end, FA, girth);
+      placeSeg(ua, shoJ[si], mid, UA, armGirth);
+      placeSeg(fa, mid, end, FA, armGirth);
       eb.position.copy(mid);
-      eb.scale.setScalar(0.035 * girth);
+      eb.scale.setScalar(0.035 * armGirth);
       _q.copy(fa.quaternion);
       hd.position.copy(end);
       // pergelangan mengikuti lengan bawah; saat mencengkeram papan, telapak
       // menghadap target (fleksi pergelangan) — grip terlihat meyakinkan
       hd.quaternion.copy(_q).multiply(tmpQ.setFromAxisAngle(xAxis, grabbing ? 0.55 : 0.25));
       if (grabbing) hd.quaternion.multiply(tmpQ.setFromAxisAngle(yAxis, -side * 0.28));
-      hd.scale.setScalar(girth);
-      cf.position.copy(end).addScaledVector(_d.set(0, 1, 0).applyQuaternion(_q), 0.02 * girth);
+      hd.scale.setScalar(armGirth);
+      cf.position.copy(end).addScaledVector(_d.set(0, 1, 0).applyQuaternion(_q), 0.02 * armGirth);
       cf.quaternion.copy(_q).multiply(tmpQ.setFromAxisAngle(xAxis, Math.PI / 2));
-      cf.scale.setScalar(girth);
+      cf.scale.setScalar(armGirth);
     }
   }
 
@@ -877,6 +909,7 @@ export function buildRider(): Rider {
     height: 1,
     head: 1,
     sword: 0.68,
+    pup: 0,
     boardRoll: 0,
     boardYaw: 0,
     boardPitch: 0,
@@ -886,5 +919,5 @@ export function buildRider(): Rider {
     poseW: 0,
   });
 
-  return { group, tail, neck, tailBone, blade, crystal, crystalU, gold, steel, goldHilt, animate, impulse, setEnv, setPup };
+  return { group, tail, neck, tailBone, blade, crystal, crystalU, gold, steel, goldHilt, animate, impulse, setEnv };
 }

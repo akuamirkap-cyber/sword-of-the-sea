@@ -302,6 +302,9 @@ export class Game {
   private scarfB = new Scarf(1.7);
   /** ekor panjang slugpup — tali verlet dari pangkal punggung (skin Slugpup) */
   private scarfTail = new Scarf(3.1);
+  /** bentuk SLUGPUP: target & blend mulus (0 = humanoid, 1 = pup penuh) */
+  private pupOn = false;
+  private pupBlend = 0;
   private whales = new WhalePod(6);
   private fish = new FishSchool(6);
   // ---- endless descent
@@ -1577,6 +1580,7 @@ export class Game {
       });
       this.rider.animate(dt, {
         time: this.time,
+        pup: this.pupBlend,
         speed: 0.35,
         steer: Math.sin(this.time * 0.22) * 0.25,
         air: false,
@@ -1871,18 +1875,19 @@ export class Game {
       }, this.vel);
     }
 
-    // ---- ekor panjang SLUGPUP: tali verlet kedua dari pangkal punggung.
-    // Aktif otomatis saat skin karakter = Slugpup (Rain World pup putih).
+    // ---- bentuk SLUGPUP: morph tubuh (a.pup) + ekor tebal dari pangkal
+    // punggung. Aktif otomatis saat skin karakter = Slugpup (Rain World).
     {
       const idx = ((Math.round(T.crystalSkin) % CRYSTAL_SKINS.length) + CRYSTAL_SKINS.length) % CRYSTAL_SKINS.length;
-      const pup = !T.crystalCustom && /slugpup/i.test(CRYSTAL_SKINS[idx].name);
-      this.rider.setPup(pup);
-      this.scarfTail.setVisible(pup);
-      if (pup) {
+      this.pupOn = !T.crystalCustom && /slugpup/i.test(CRYSTAL_SKINS[idx].name);
+      this.pupBlend += ((this.pupOn ? 1 : 0) - this.pupBlend) * (1 - Math.exp(-dt * 6));
+      this.scarfTail.setVisible(this.pupBlend > 0.03);
+      if (this.scarfTail.mesh.visible) {
         this.rider.tailBone.getWorldPosition(this.t1);
+        // ekor slugcat: tebal di pangkal, meruncing — panjang ikut slider slayer
         this.scarfTail.update(dt, this.t1, this.scarfBack, speed, this.time, {
-          length: 2 + T.scarfLength * 0.24, // ekor panjang, ikut slider slayer
-          width: 0.2 + T.scarfWidth * 0.22,
+          length: 2.1 + T.scarfLength * 0.22,
+          width: 0.3 + T.scarfWidth * 0.15,
           flutter: 0.6,
         }, this.vel);
       }
@@ -2655,6 +2660,7 @@ export class Game {
     const bt = this.air.board;
     this.rider.animate(dt, {
       time: this.time,
+      pup: this.pupBlend,
       speed: clamp(Math.hypot(this.vel.x, this.vel.z) / 72, 0, 1),
       steer: this.steer,
       air: !this.grounded,
