@@ -1789,6 +1789,7 @@ export function SettingsPanel({
                   dist: 'cam0Dist' | 'cam1Dist' | 'cam2Dist' | 'cam3Dist';
                   pitch: 'cam0Pitch' | 'cam1Pitch' | 'cam2Pitch' | 'cam3Pitch';
                   yaw: 'cam0Yaw' | 'cam1Yaw' | 'cam2Yaw' | 'cam3Yaw';
+                  height: 'cam0Height' | 'cam1Height' | 'cam2Height' | 'cam3Height';
                   pMin: number;
                   pMax: number;
                   yMin: number;
@@ -1800,6 +1801,7 @@ export function SettingsPanel({
                     dist: 'cam0Dist',
                     pitch: 'cam0Pitch',
                     yaw: 'cam0Yaw',
+                    height: 'cam0Height',
                     pMin: -5,
                     pMax: 45,
                     yMin: -75,
@@ -1811,6 +1813,7 @@ export function SettingsPanel({
                     dist: 'cam1Dist',
                     pitch: 'cam1Pitch',
                     yaw: 'cam1Yaw',
+                    height: 'cam1Height',
                     pMin: -20,
                     pMax: 35,
                     yMin: -60,
@@ -1822,6 +1825,7 @@ export function SettingsPanel({
                     dist: 'cam2Dist',
                     pitch: 'cam2Pitch',
                     yaw: 'cam2Yaw',
+                    height: 'cam2Height',
                     pMin: -5,
                     pMax: 35,
                     yMin: -90,
@@ -1833,6 +1837,7 @@ export function SettingsPanel({
                     dist: 'cam3Dist',
                     pitch: 'cam3Pitch',
                     yaw: 'cam3Yaw',
+                    height: 'cam3Height',
                     pMin: -30,
                     pMax: 90,
                     yMin: -45,
@@ -1848,12 +1853,22 @@ export function SettingsPanel({
                     </div>
                     <Slider
                       label="jarak mode ini"
-                      hint="mengalikan jarak khusus mode ini (bodycam default ×2.0)"
+                      hint="mengalikan jarak khusus mode ini (bodycam default ×2.0, max ×50)"
                       value={l[c.dist]}
                       min={0.5}
-                      max={5}
+                      max={50}
                       onChange={(v) => set({ [c.dist]: v } as Partial<Tune>)}
                       fmt={(v) => `×${v.toFixed(2)}`}
+                    />
+                    <Slider
+                      label="tinggi kamera (mode ini)"
+                      hint="letak kamera: naikkan = lebih tinggi di atas rider, turunkan = lebih rendah"
+                      value={l[c.height]}
+                      min={-2}
+                      max={14}
+                      step={0.1}
+                      onChange={(v) => set({ [c.height]: v } as Partial<Tune>)}
+                      fmt={(v) => `${v > 0 ? '+' : ''}${v.toFixed(1)} m`}
                     />
                     <Slider
                       label="sudut vertikal"

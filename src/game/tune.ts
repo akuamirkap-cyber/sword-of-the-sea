@@ -65,15 +65,19 @@ export interface Tune {
   cam0Dist: number; // Klasik — jarak
   cam0Pitch: number; // Klasik — sudut vertikal
   cam0Yaw: number; // Klasik — sudut horizontal (default 40° = samping-belakang kanan asli)
+  cam0Height: number; // Klasik — offset tinggi letak kamera (meter)
   cam1Dist: number; // Sekiro — jarak dasar
   cam1Pitch: number; // Sekiro — sudut vertikal dasar (default 2° ≈ level → third-person)
   cam1Yaw: number; // Sekiro — sudut horizontal dasar
+  cam1Height: number; // Sekiro — offset tinggi letak kamera (meter)
   cam2Dist: number; // Sword of the Sea — jarak
   cam2Pitch: number; // Sword of the Sea — sudut vertikal
   cam2Yaw: number; // Sword of the Sea — sudut horizontal
+  cam2Height: number; // Sword of the Sea — offset tinggi letak kamera (meter)
   cam3Dist: number; // Bodycam — jarak (mengalikan offset 0.85 m dari punggung)
   cam3Pitch: number; // Bodycam — sudut vertikal (positif = menunduk ke lintasan)
   cam3Yaw: number; // Bodycam — sudut horizontal (toleh kiri/kanan)
+  cam3Height: number; // Bodycam — offset tinggi letak kamera (meter)
 
   // ---- fx
   particles: number;
@@ -242,15 +246,19 @@ export const DEFAULT_TUNE: Tune = {
   cam0Dist: 1,
   cam0Pitch: 17,
   cam0Yaw: 40,
+  cam0Height: 0,
   cam1Dist: 1,
   cam1Pitch: 2,
   cam1Yaw: 0,
+  cam1Height: 0,
   cam2Dist: 1,
   cam2Pitch: 9,
   cam2Yaw: 0,
+  cam2Height: 0,
   cam3Dist: 2,
   cam3Pitch: 30,
   cam3Yaw: 0,
+  cam3Height: 0,
 
   particles: 1,
   trails: 1,

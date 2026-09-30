@@ -3289,6 +3289,12 @@ export class Game {
         this.lockRing.visible = false;
       }
 
+      // ---- LETAK KAMERA: offset tinggi per mode (Settings ⚙️ → Kamera →
+      // "tinggi kamera"). Diterapkan sebelum clearance terrain, jadi kamera
+      // tetap tidak pernah menembus bukit walau diturunkan.
+      this.t2.y +=
+        mode === 0 ? T.cam0Height : mode === 1 ? T.cam1Height : mode === 2 ? T.cam2Height : T.cam3Height;
+
       // ============================ avoidTerrain ============================
       // clearance minimal di atas terrain; sampel 3 titik garis kamera→rider
       // (30%, 55%, 80%): jika ada punggung bukit di atas garis pandang, kamera

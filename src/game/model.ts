@@ -522,15 +522,25 @@ export function buildRider(): Rider {
   {
     const earGeo = new THREE.SphereGeometry(0.034, 16, 12);
     const earL = new THREE.Mesh(earGeo, crystal);
-    earL.position.set(-0.062, 0.085, -0.005);
+    earL.position.set(-0.07, 0.07, -0.012);
     earL.scale.set(0.85, 1, 0.6);
     const earR = new THREE.Mesh(earGeo, crystal);
-    earR.position.set(0.062, 0.085, -0.005);
+    earR.position.set(0.07, 0.07, -0.012);
     earR.scale.set(0.85, 1, 0.6);
     ears.add(earL, earR);
     ears.visible = false;
     head.add(ears);
   }
+  // moncong kecil khas ferret — tumbuh bersama morph pup
+  const snout = (() => {
+    const g = new THREE.SphereGeometry(0.03, 14, 10);
+    g.scale(0.9, 0.62, 1.25);
+    const m = new THREE.Mesh(g, crystal);
+    m.position.set(0, -0.014, 0.093);
+    m.visible = false;
+    head.add(m);
+    return m;
+  })();
   const tailBone = new THREE.Object3D();
   tailBone.position.set(0, -0.05, -0.11);
   body.add(tailBone);
@@ -596,21 +606,22 @@ export function buildRider(): Rider {
     const k = (r: number) => 1 - Math.exp(-dt * r);
 
     // ---------------- proportions
-    // SLUGPUP MORPH (a.pup 0→1): kepala membesar & menyatu (leher hilang),
-    // badan membulat bentuk siput, lengan kurus, kaki tebal pendek — anatomi
-    // slugcat Rain World asli (mata hitam bulat + telinga bulat + ekor tebal).
+    // SLUGPUP MORPH (a.pup 0→1) — proporsi FERRET PUTIH (bukan panda!):
+    // badan PANJANG ramping seperti tabung, kepala KECIL dengan moncong,
+    // leher pendek, mata hitam kecil, kaki pendek ramping, telinga kecil
+    // di sisi — siluet mustelid khas slugcat Rain World.
     const pup = clamp(a.pup, 0, 1);
     const s = clamp(a.sword, 0.35, 1.3);
     const h = clamp(a.height, 0.4, 1.15);
-    const legK = h * (1 - 0.24 * pup); // kaki lebih pendek → pup selalu crouching
-    const torsoK = (0.4 + 0.6 * h) * (1 - 0.14 * pup);
-    const armK = (0.32 + 0.68 * h) * (1 - 0.22 * pup); // lengan kurus pendek
-    const neckK = (0.45 + 0.55 * h) * (1 - 0.86 * pup); // leher nyaris lenyap
+    const legK = h * (1 - 0.34 * pup); // kaki pendek khas mustelid
+    const torsoK = (0.4 + 0.6 * h) * (1 + 0.52 * pup); // tulang belakang PANJANG
+    const armK = (0.32 + 0.68 * h) * (1 - 0.16 * pup);
+    const neckK = (0.45 + 0.55 * h) * (1 - 0.5 * pup); // leher pendek tapi ada
     const girth = 1 + (1 - h) * 0.45;
-    const headK = clamp(a.head, 0.6, 2.4) * (1 + 0.55 * pup); // kepala bulat besar
-    const armGirth = girth * (1 - 0.32 * pup); // lengan tipis + telapak kecil
-    const legGirth = girth * (1 + 0.55 * pup); // kaki belakang tebal
-    const footK = girth * (1 - 0.22 * pup); // ...dengan kaki (telapak) kecil
+    const headK = clamp(a.head, 0.6, 2.4) * (1 - 0.44 * pup); // kepala KECIL
+    const armGirth = girth * (1 - 0.4 * pup); // langan jarum
+    const legGirth = girth * (1 - 0.12 * pup); // kaki ramping (bukan paha beruang)
+    const footK = girth * (1 - 0.34 * pup); // telapak mungil
     const UAk = UA * armK;
     const FAk = FA * armK;
     const reach = (UAk + FAk) * 0.94;
@@ -624,8 +635,13 @@ export function buildRider(): Rider {
     cuffR.visible = showOutfit;
     ankL.visible = showOutfit;
     ankR.visible = showOutfit;
+    // wajah ferret: mata mengecil, telinga mengecil ke sisi, moncong tumbuh
     eyes.visible = pup > 0.02;
+    eyes.scale.setScalar(1 - 0.34 * pup);
     ears.visible = pup > 0.02;
+    ears.scale.set(1 - 0.4 * pup, 1 - 0.22 * pup, 1 - 0.4 * pup);
+    snout.visible = pup > 0.02;
+    snout.scale.setScalar(pup);
 
     // ---------------- grab pose crossfade (one style at a time)
     const want = a.pose && POSES[a.pose] ? a.pose : null;
@@ -706,12 +722,12 @@ export function buildRider(): Rider {
 
     pelvis.position.copy(pelvisP);
     pelvis.quaternion.copy(qBody);
-    // badan siput: panggul & dada membulat tebal saat pup
-    pelvis.scale.set(1 + 0.4 * pup, 0.5 + 0.5 * torsoK, 1 + 0.46 * pup);
+    // badan ferret: ramping dari depan, DALAM dari samping (tabung panjang)
+    pelvis.scale.set(1 - 0.1 * pup, 0.5 + 0.5 * torsoK, 1 + 0.14 * pup);
     lb(qBody, pelvisP, 0, 0.07 * torsoK, 0, v);
     torso.position.copy(v);
     torso.quaternion.copy(qSpine);
-    torso.scale.set(1 + 0.42 * pup, torsoK, 1 + 0.52 * pup);
+    torso.scale.set(1 - 0.1 * pup, torsoK, 1 + 0.26 * pup);
     lb(qSpine, v, 0, 0.36 * torsoK, 0.012, chestP);
     lb(qSpine, v, 0, 0.47 * torsoK, 0, neckBase);
 
