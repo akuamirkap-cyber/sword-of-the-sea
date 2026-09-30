@@ -398,9 +398,11 @@ export class Scarf {
       const tw = Math.sin(t * 4.5 - i * 0.3) * 0.4 * o.flutter * f;
       this.side.copy(this.sideB).multiplyScalar(Math.cos(tw)).addScaledVector(this.bin, Math.sin(tw));
 
-      // Streamlined profile: slender and elegantly tapered without widening in the middle
+      // Streamlined profile: slender and elegantly tapered without widening in the middle.
+      // Dua cincin pertama melebar → pita melebur mulus dari belitan kerah leher.
       const shape = this.ethereal ? (0.85 - 0.3 * f) : (0.9 - 0.35 * f);
-      const w = o.width * (i === 0 ? 0.6 : shape) * 0.5;
+      const root = i === 0 ? 1.05 : i === 1 ? 0.8 : shape;
+      const w = o.width * root * 0.5;
       const k = i * 6;
       const p = this.p[i];
       this.pos[k] = p.x - this.side.x * w;

@@ -58,6 +58,7 @@ export interface Rider {
   impulse: (strength: number) => void;
   setEnv: (tex: THREE.Texture) => void;
   setBoard: (type: number) => void; // 0 = papan surf Silver Surfer · 1 = pedang
+  setScarfLook: (kind: number, hex: string) => void; // kerah slayer: -1 mati · 0 kain · 1 sulaman · 2 ethereal
 }
 
 // ============================================================ grab poses
@@ -445,6 +446,67 @@ export function buildRider(): Rider {
     ),
   );
   const head = mk(headGeo());
+
+  // ---- KERAH SLAYER: band kain MELINGKAR di pangkal leher + lipatan silang
+  // (syal yang benar-benar dililit, bukan pita menempel satu titik).
+  // Anak neckMesh → mengikuti lekuk leher, swing superman & skala pup.
+  const scarfCollar = (() => {
+    const g = new THREE.Group();
+    // band utama: silinder kain sedikit melebar ke bawah (kain menyusup)
+    const bandGeo = new THREE.CylinderGeometry(0.063, 0.07, 0.078, 26, 1, true);
+    const bandMat = new THREE.MeshStandardMaterial({
+      color: 0xc42f3a,
+      roughness: 0.82,
+      metalness: 0,
+      side: THREE.DoubleSide,
+      emissive: new THREE.Color(0x1c0604),
+      emissiveIntensity: 0.35,
+    });
+    const band = new THREE.Mesh(bandGeo, bandMat);
+    // lipatan silang kedua: torus tipis dimiringkan → kesan dililit dua kali
+    const wrapGeo = new THREE.TorusGeometry(0.0655, 0.0145, 12, 30);
+    const wrap = new THREE.Mesh(wrapGeo, bandMat);
+    wrap.rotation.set(Math.PI / 2, 0, 0.42);
+    wrap.position.y = 0.004;
+    // trim emas di bibir atas & bawah band (muncul saat mode sulaman journey)
+    const trimGeo = new THREE.TorusGeometry(0.0675, 0.0038, 8, 34);
+    const trimT = new THREE.Mesh(trimGeo, gold);
+    const trimB = new THREE.Mesh(trimGeo, gold);
+    trimT.rotation.x = Math.PI / 2;
+    trimB.rotation.x = Math.PI / 2;
+    trimT.position.y = 0.039;
+    trimB.position.y = -0.039;
+    trimT.visible = false;
+    trimB.visible = false;
+    g.add(band, wrap, trimT, trimB);
+    g.position.y = 0.05;
+    g.visible = false;
+    neckMesh.add(g);
+    return { group: g, bandMat, trimT, trimB };
+  })();
+
+  /** tampilan kerah mengikuti mode slayer: 0 kain warna · 1 sulaman journey · 2 ethereal */
+  function setScarfLook(kind: number, hex: string) {
+    const on = kind >= 0;
+    scarfCollar.group.visible = on;
+    if (!on) return;
+    const c = new THREE.Color(hex);
+    if (kind === 2) {
+      // ethereal: kain cahaya — emissive kuat dari warna inti palette
+      scarfCollar.bandMat.color.copy(c).multiplyScalar(0.35);
+      scarfCollar.bandMat.emissive.copy(c);
+      scarfCollar.bandMat.emissiveIntensity = 1.1;
+      scarfCollar.trimT.visible = false;
+      scarfCollar.trimB.visible = false;
+    } else {
+      // kain biasa / sulaman journey: warna kain, trim emas hanya di sulaman
+      scarfCollar.bandMat.color.copy(kind === 1 ? new THREE.Color(0x9c2313) : c);
+      scarfCollar.bandMat.emissive.set(kind === 1 ? 0x2a0a06 : 0x1c0604);
+      scarfCollar.bandMat.emissiveIntensity = 0.35;
+      scarfCollar.trimT.visible = kind === 1;
+      scarfCollar.trimB.visible = kind === 1;
+    }
+  }
   const deltGeo = new THREE.SphereGeometry(0.056, 28, 20);
   deltGeo.scale(1.02, 0.86, 0.98); // otot bahu pipih, menyatu dada
   const deltL = mk(deltGeo);
@@ -911,5 +973,5 @@ export function buildRider(): Rider {
     poseW: 0,
   });
 
-  return { group, tail, neck, tailBone, blade, crystal, crystalU, gold, steel, goldHilt, animate, impulse, setEnv, setBoard };
+  return { group, tail, neck, tailBone, blade, crystal, crystalU, gold, steel, goldHilt, animate, impulse, setEnv, setBoard, setScarfLook };
 }

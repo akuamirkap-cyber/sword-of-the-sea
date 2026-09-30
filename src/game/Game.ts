@@ -1864,6 +1864,20 @@ export class Game {
       this.scarfA.setSkin(eth, Math.round(T.scarfEthereal));
       this.scarfB.setSkin(eth, Math.round(T.scarfEthereal));
     }
+    // ---- kerah slayer melingkar di leher: warna/tampilan mengikuti mode
+    {
+      const skin = Math.round(T.scarfSkin);
+      const hex = SCARF_COLORS[T.scarfColor % SCARF_COLORS.length].hex;
+      if (skin === 1) {
+        const pal = ETHEREAL_SKINS[Math.round(T.scarfEthereal) % ETHEREAL_SKINS.length];
+        this.rider.setScarfLook(2, pal.core);
+      } else if (T.scarfEmbroidery) {
+        this.rider.setScarfLook(1, hex);
+      } else {
+        this.rider.setScarfLook(0, hex);
+      }
+    }
+
     // Character scarf glow reduced and clamped
     const safeScarfGlow = Math.min(0.28, T.glowFx * T.glare * 0.3);
     this.scarfA.setGlow(safeScarfGlow);
@@ -1873,7 +1887,8 @@ export class Game {
     this.scarfBack.set(-fx, 0, -fz);
     this.scarfLat.set(fz, 0, -fx);
     this.rider.neck.getWorldPosition(this.scarfAnchor);
-    this.scarfAnchor.addScaledVector(this.scarfBack, 0.12);
+    this.scarfAnchor.y -= 0.015;
+    this.scarfAnchor.addScaledVector(this.scarfBack, 0.052); // dari bibir belakang kerah
     const speed = Math.hypot(this.vel.x, this.vel.z);
     const opts = { length: T.scarfLength, width: T.scarfWidth, flutter: T.scarfFlutter };
 
