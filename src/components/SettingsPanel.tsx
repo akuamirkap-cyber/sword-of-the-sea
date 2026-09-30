@@ -1842,7 +1842,7 @@ export function SettingsPanel({
                     pMax: 90,
                     yMin: -45,
                     yMax: 45,
-                    pitchHint: 'default 30° menunduk · 90° = menunduk penuh ke lintasan',
+                    pitchHint: 'default 15° ala head-cam · 90° = menunduk penuh ke lintasan',
                   },
                 ];
                 const c = cfg[m] ?? cfg[0];

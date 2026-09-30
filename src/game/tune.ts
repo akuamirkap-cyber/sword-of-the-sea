@@ -256,7 +256,7 @@ export const DEFAULT_TUNE: Tune = {
   cam2Yaw: 0,
   cam2Height: 0,
   cam3Dist: 2,
-  cam3Pitch: 30,
+  cam3Pitch: 15,
   cam3Yaw: 0,
   cam3Height: 0,
 
@@ -643,9 +643,9 @@ export const CAM_PRESETS: FeelPreset[] = [
     values: { camStyle: 2, camDist: 1, camLag: 0.85, fov: 1.0, shake: 0.3 },
   },
   {
-    name: 'Bodycam ●',
-    desc: 'DEFAULT: di dada — jarak ×2.0 · 30° menunduk, FOV lebar, handheld',
-    values: { camStyle: 3, camDist: 1, camLag: 1.6, fov: 0.8, shake: 0.55 },
+    name: 'Bodycam v1 ●',
+    desc: 'DEFAULT: head-cam — di kepala, 15° menunduk, lensa super lebar, handheld kencang',
+    values: { camStyle: 3, camDist: 1, camLag: 1.6, fov: 0.85, shake: 0.65 },
   },
 ];
 

@@ -3254,38 +3254,37 @@ export class Game {
         rollOverride = -0.07 * lean + 0.015 * Math.sin(this.time * 0.17);
         this.lockRing.visible = false;
       } else {
-        // ---------------- BODYCAM ----------------
-        // kamera action-cam terpasang di dada rider: super dekat, FOV lebar,
-        // ikutan kencang + goyangan handheld halus. Drag = toleh sekeliling,
-        // scroll = sedikit maju/mundur. ROLL mengikuti carve → terasa "di badan".
-        // Default ×2.0 · 30°; sudut vertikal bisa diatur 0–90° (90° = menunduk
-        // penuh ke lintasan) — arah pandang memakai vektor arah, bukan tan(),
-        // jadi tetap stabil di sudut ekstrem.
+        // ---------------- BODYCAM v1 ----------------
+        // head-cam: action-cam terpasang di KEPALA rider — tinggi, sedikit
+        // menunduk ke lintasan (default 15°), lensa super lebar, goyangan
+        // handheld kencang. Drag = toleh sekeliling, scroll = maju/mundur,
+        // slider Settings = jarak (s/d ×50), sudut & tinggi letak kamera.
+        // Arah pandang memakai vektor arah (bukan tan()) → stabil sampai 90°.
         kPos = 24;
         kLook = 30;
         clearance = 0.45;
-        swayScale = 0.55;
+        swayScale = 0.7;
         const az = this.camHeading + Math.PI + rad(T.cam3Yaw) + o.yaw;
         const pitch = clamp(rad(T.cam3Pitch) + o.pitch, -0.6, Math.PI / 2);
         const dist = 0.85 * T.cam3Dist * o.zoom;
-        const chest = 0.75 + 1.05 * T.bodyHeight; // tinggi dada mengikuti postur rider
+        const head = 1.32 + 1.18 * T.bodyHeight; // tinggi kepala mengikuti postur rider
         this.t2.set(
           px + Math.sin(az) * dist,
-          py + chest + Math.sin(pitch) * 1.2,
+          py + head + Math.sin(pitch) * 1.2,
           pz + Math.cos(az) * dist,
         );
-        // menatap jauh ke lintasan: pitch memutar arah pandang (30° = menunduk
-        // menyusuri lereng, 90° = tegak lurus ke bawah)
+        // menatap jauh ke lintasan: pitch memutar arah pandang (15° = menunduk
+        // ala head-cam, 90° = tegak lurus ke bawah)
         const ahead = 30;
         const cosP = Math.cos(pitch);
         this.t3.set(
           px + Math.sin(az) * dist - Math.sin(az) * ahead * cosP,
-          py + chest + Math.sin(pitch) * 1.2 - Math.sin(pitch) * ahead,
+          py + head + Math.sin(pitch) * 1.2 - Math.sin(pitch) * ahead,
           pz + Math.cos(az) * dist - Math.cos(az) * ahead * cosP,
         );
-        // FOV sangat lebar + "napas" halus khas lensa action-cam
-        fovOverride = (94 + 8 * sn) * (0.7 + 0.3 * (T.fov / 0.75)) + Math.sin(this.time * 1.9) * 1.2;
-        rollOverride = -0.1 * lean + 0.012 * Math.sin(this.time * 0.9);
+        // lensa action-cam: sangat lebar + "napas" + micro-jitter dua lapis
+        fovOverride = (100 + 9 * sn) * (0.7 + 0.3 * (T.fov / 0.75)) + Math.sin(this.time * 1.9) * 1.2;
+        rollOverride = -0.1 * lean + 0.018 * Math.sin(this.time * 0.9) + 0.007 * Math.sin(this.time * 2.7 + 1.1);
         this.lockRing.visible = false;
       }
 

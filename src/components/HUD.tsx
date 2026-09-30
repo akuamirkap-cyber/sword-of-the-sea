@@ -418,7 +418,7 @@ function BodycamOverlay({ stats }: { stats: HudStats }) {
         <span className="ml-2 text-sand-50/60">BAT {bat}%</span>
       </div>
       <div className="absolute bottom-[4.2rem] right-9 text-[9px] tracking-[0.26em] text-sand-50/50">
-        SOTS · BODYCAM · 1080p60
+        BODYCAM V1 · 1080p60
       </div>
     </div>
   );

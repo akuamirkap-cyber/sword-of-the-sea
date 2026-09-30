@@ -412,23 +412,6 @@ export function buildRider(): Rider {
     ),
   );
   const head = mk(headGeo());
-  const tailGeo = loft(
-    [
-      { y: 0, w: 0.03, d: 0.034 },
-      { y: 0.08, w: 0.036, d: 0.04, z: -0.012 },
-      { y: 0.2, w: 0.03, d: 0.034, z: -0.02 },
-      { y: 0.34, w: 0.02, d: 0.024, z: -0.012 },
-      { y: 0.46, w: 0.008, d: 0.01, z: 0.004 },
-    ],
-    20,
-    6,
-    0.6,
-    1,
-  );
-  tailGeo.rotateX(Math.PI);
-  const ponytail = mk(tailGeo);
-  const circlet = mk(new THREE.TorusGeometry(0.083, 0.0065, 10, 64), gold);
-
   const deltGeo = new THREE.SphereGeometry(0.056, 28, 20);
   deltGeo.scale(1.05, 0.95, 0.95);
   const deltL = mk(deltGeo);
@@ -460,9 +443,6 @@ export function buildRider(): Rider {
   const jointGeo = new THREE.SphereGeometry(1, 20, 14);
   const elbowL = mk(jointGeo);
   const elbowR = mk(jointGeo);
-  const cuffGeo = new THREE.TorusGeometry(0.029, 0.0055, 8, 40);
-  const cuffL = mk(cuffGeo, gold);
-  const cuffR = mk(cuffGeo, gold);
 
   const TH = 0.45;
   const SH = 0.44;
@@ -474,9 +454,6 @@ export function buildRider(): Rider {
   const shinR = mk(shinGeo);
   const kneeL = mk(jointGeo);
   const kneeR = mk(jointGeo);
-  const ankleGeo = new THREE.TorusGeometry(0.034, 0.006, 8, 40);
-  const ankL = mk(ankleGeo, gold);
-  const ankR = mk(ankleGeo, gold);
   const footGeo = loft(
     [
       { y: -0.06, w: 0.03, d: 0.03 },
@@ -553,7 +530,6 @@ export function buildRider(): Rider {
   let crouchV = 0;
   let armBlend = 0;
   let tuck = 0;
-  let tailSwing = 1;
   let twist = 0;
   let curPose: string | null = null;
   let poseW = 0;
@@ -629,12 +605,6 @@ export function buildRider(): Rider {
     // ---- aksesori & fitur fade sesuai bentuk (pup = tanpa pakaian)
     const showOutfit = pup < 0.5;
     belt.visible = showOutfit;
-    circlet.visible = showOutfit;
-    ponytail.visible = showOutfit;
-    cuffL.visible = showOutfit;
-    cuffR.visible = showOutfit;
-    ankL.visible = showOutfit;
-    ankR.visible = showOutfit;
     // wajah ferret: mata mengecil, telinga mengecil ke sisi, moncong tumbuh
     eyes.visible = pup > 0.02;
     eyes.scale.setScalar(1 - 0.34 * pup);
@@ -702,7 +672,6 @@ export function buildRider(): Rider {
     armBlend += ((a.air ? 1 : 0) - armBlend) * k(4);
     tuck += (flipAmt - tuck) * k(7);
     twist += (a.steer * 0.3 - twist) * k(5);
-    tailSwing += (0.9 + a.speed * 0.6 + (a.air ? 0.3 : 0) - tailSwing) * k(3);
     const breathe = Math.sin(a.time * 1.6) * 0.012 * torsoK;
 
     // ---------------- core (body space)
@@ -754,17 +723,6 @@ export function buildRider(): Rider {
     head.scale.setScalar(headK);
     neck.position.copy(neckBase);
 
-    lb(qHead, headC, 0, 0.042 * headK, -0.004 * headK, circlet.position);
-    circlet.quaternion.copy(qHead).multiply(tmpQ.setFromAxisAngle(xAxis, Math.PI / 2 + 0.22));
-    circlet.scale.setScalar(1.12 * headK);
-
-    lb(qHead, headC, 0, 0.055 * headK, -0.086 * headK, ponytail.position);
-    const swing = 0.9 * tailSwing + Math.sin(a.time * 3.1) * 0.12 * (0.5 + a.speed);
-    e.set(swing, Math.sin(a.time * 2.3) * 0.15 * (0.4 + a.speed), 0);
-    tmpQ.setFromEuler(e);
-    ponytail.quaternion.copy(qHead).multiply(tmpQ);
-    ponytail.scale.setScalar(0.4 + 0.6 * headK);
-
     // ---------------- SUPERMAN: the whole body swings out behind the sword
     const sw = P && P.superman ? w : 0;
     if (sw > 0.001) {
@@ -807,7 +765,6 @@ export function buildRider(): Rider {
       const th = si === 0 ? thighL : thighR;
       const sh = si === 0 ? shinL : shinR;
       const kn = si === 0 ? kneeL : kneeR;
-      const an = si === 0 ? ankL : ankR;
       const ft = si === 0 ? footL : footR;
       placeSeg(th, hipJ[si], mid, TH, legGirth);
       placeSeg(sh, mid, end, SH, legGirth);
@@ -822,9 +779,6 @@ export function buildRider(): Rider {
       ft.quaternion.multiply(tmpQ.setFromAxisAngle(xAxis, armBlend * 0.34));
       ft.position.copy(end);
       ft.scale.setScalar(footK);
-      an.position.copy(end).add(v.set(0, -0.02 * footK, 0).applyQuaternion(ft.quaternion));
-      an.quaternion.copy(ft.quaternion).multiply(tmpQ.setFromAxisAngle(xAxis, Math.PI / 2));
-      an.scale.setScalar(footK);
     }
 
     // ---------------- arms: balance → wings → tuck → grab pose
@@ -880,7 +834,6 @@ export function buildRider(): Rider {
       const fa = si === 0 ? foreL : foreR;
       const eb = si === 0 ? elbowL : elbowR;
       const hd = si === 0 ? handL : handR;
-      const cf = si === 0 ? cuffL : cuffR;
       placeSeg(ua, shoJ[si], mid, UA, armGirth);
       placeSeg(fa, mid, end, FA, armGirth);
       eb.position.copy(mid);
@@ -892,9 +845,6 @@ export function buildRider(): Rider {
       hd.quaternion.copy(_q).multiply(tmpQ.setFromAxisAngle(xAxis, grabbing ? 0.55 : 0.25));
       if (grabbing) hd.quaternion.multiply(tmpQ.setFromAxisAngle(yAxis, -side * 0.28));
       hd.scale.setScalar(armGirth);
-      cf.position.copy(end).addScaledVector(_d.set(0, 1, 0).applyQuaternion(_q), 0.02 * armGirth);
-      cf.quaternion.copy(_q).multiply(tmpQ.setFromAxisAngle(xAxis, Math.PI / 2));
-      cf.scale.setScalar(armGirth);
     }
   }
 
