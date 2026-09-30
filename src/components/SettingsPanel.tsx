@@ -3,11 +3,13 @@ import { PALETTES } from '../game/palette';
 import {
   AIR_PRESETS,
   BLOOM_PRESETS,
+  CAM_PRESETS,
   DEFAULT_TUNE,
   FEEL_PRESETS,
   FOG_PRESETS,
   LIGHT_PRESETS,
   MASTER_PRESETS,
+  WORLD_PRESETS,
   type Tune,
 } from '../game/tune';
 import { ETHEREAL_SKINS, SCARF_COLORS } from '../game/scarf';
@@ -21,7 +23,7 @@ const BODY_PRESETS = [
   { name: 'Normal', desc: 'proporsi dewasa', v: { bodyHeight: 1, headSize: 1 } },
 ];
 
-type Tab = 'feel' | 'air' | 'book' | 'bloom' | 'light' | 'fog' | 'water' | 'sky' | 'scarf' | 'grade' | 'cam' | 'fx';
+type Tab = 'feel' | 'air' | 'book' | 'bloom' | 'light' | 'fog' | 'world' | 'water' | 'sky' | 'scarf' | 'grade' | 'cam' | 'fx';
 
 const TABS: [Tab, string][] = [
   ['feel', 'Hover'],
@@ -30,6 +32,7 @@ const TABS: [Tab, string][] = [
   ['bloom', 'Bloom'],
   ['light', 'Cahaya'],
   ['fog', 'Kabut'],
+  ['world', 'Dunia'],
   ['sky', 'Langit & Paus'],
   ['scarf', 'Karakter & Slayer'],
   ['grade', 'Warna'],
@@ -1683,10 +1686,70 @@ export function SettingsPanel({
             </>
           )}
 
+          {tab === 'world' && (
+            <>
+              <div className="mb-2 text-[9px] font-semibold uppercase tracking-[0.3em] text-sand-200/60">
+                mode dunia — medan langsung terbangun ulang
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {WORLD_PRESETS.map((p) => {
+                  const active = Math.round(l.worldMode) === Math.round(p.values.worldMode ?? 0);
+                  return (
+                    <button
+                      key={p.name}
+                      onClick={() => set(p.values)}
+                      className={`rounded-xl border px-2 py-2 text-left transition ${
+                        active
+                          ? 'border-sand-100/80 bg-white/15'
+                          : 'border-sand-200/25 bg-black/20 hover:border-sand-100/70 hover:bg-white/10'
+                      }`}
+                    >
+                      <div className="font-display text-[15px] leading-none">{p.name}</div>
+                      <div className="mt-1 text-[7px] leading-tight uppercase tracking-[0.1em] text-sand-200/55">
+                        {p.desc}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-3 rounded-xl border border-sand-200/20 bg-black/25 px-3 py-2 text-[9px] leading-relaxed text-sand-200/65">
+                Dunia dibangkitkan murni dari fungsi matematika (simplex noise + ridged,
+                seed tetap) — bantalan medan tidak pernah disimpan, jadi ngarai, sungai
+                & jurang selalu sama di titik yang sama. Transisi antar biome memakai
+                noise 1D lambat dan selalu mulus tanpa garis batas.
+              </div>
+            </>
+          )}
+
           {tab === 'cam' && (
             <>
+              <div className="mb-2 text-[9px] font-semibold uppercase tracking-[0.3em] text-sand-200/60">
+                mode kamera — sekali klik (atau tekan 1 / 2 / 3)
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {CAM_PRESETS.map((p) => {
+                  const active = Math.round(l.camStyle) === Math.round(p.values.camStyle ?? 0);
+                  return (
+                    <button
+                      key={p.name}
+                      onClick={() => set(p.values)}
+                      className={`rounded-xl border px-2 py-2 text-left transition ${
+                        active
+                          ? 'border-sand-100/80 bg-white/15'
+                          : 'border-sand-200/25 bg-black/20 hover:border-sand-100/70 hover:bg-white/10'
+                      }`}
+                    >
+                      <div className="font-display text-[15px] leading-none">{p.name}</div>
+                      <div className="mt-1 text-[7px] leading-tight uppercase tracking-[0.1em] text-sand-200/55">
+                        {p.desc}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
               <Slider
                 label="jarak kamera"
+                hint="mengalikan gaya kamera yang dipilih"
                 value={l.camDist}
                 min={0.6}
                 max={1.7}

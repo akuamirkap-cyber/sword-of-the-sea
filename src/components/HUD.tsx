@@ -372,6 +372,8 @@ const KEYS: [string, string][] = [
   ['A / D', 'carve · spin di udara'],
   ['SHIFT', 'boost · GRAB di udara'],
   ['W / ↑', 'air jump juga (pakai 10 flow)'],
+  ['1 / 2 / 3', 'mode kamera: klasik · SEKIRO · sword of the sea'],
+  ['DRAG · SCROLL', 'di mode Sekiro: orbit kamera · zoom'],
   ['R · T', 'run baru · setting'],
 ];
 

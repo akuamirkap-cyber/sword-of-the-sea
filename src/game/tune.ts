@@ -52,6 +52,8 @@ export interface Tune {
   speed: number;
 
   // ---- camera
+  camStyle: number; // 0 = Klasik, 1 = Sekiro (orbit + lock-on), 2 = Sword of the Sea (sinematik)
+  worldMode: number; // 0 = Petualangan (auto blend biome), 1 = Gurun Pasir, 2 = Ngarai Merah, 3 = Reruntuhan Kuil
   camDist: number;
   camLag: number;
   fov: number;
@@ -193,7 +195,7 @@ export const DEFAULT_TUNE: Tune = {
   tint: 0,
   lift: 0,
   gain: 1,
-  vignette: 0.18,
+  vignette: 0, // tanpa vignette gelap — layar bersih
   grain: 0.03,
 
   // default = the "Silk" feel, so it glides beautifully out of the box
@@ -210,10 +212,12 @@ export const DEFAULT_TUNE: Tune = {
   turn: 1,
   speed: 1,
 
-  camDist: 1.02,
-  camLag: 0.82,
-  fov: 0.95,
-  shake: 0.55,
+  camStyle: 1, // DEFAULT = Sekiro (orbit + lock-on) — tekan 1/2/3 untuk ganti
+  worldMode: 0, // DEFAULT = Petualangan (biome berganti mulus sepanjang perjalanan)
+  camDist: 1,
+  camLag: 1.15,
+  fov: 0.75,
+  shake: 0.35,
 
   particles: 1,
   trails: 1,
@@ -285,7 +289,7 @@ export const DEFAULT_TUNE: Tune = {
   flipSpeed: 1,
   landAssist: 0.6,
   landWindow: 1,
-  airJumps: 2,
+  airJumps: 0, // double jump dinonaktifkan dulu (bisa diaktifkan lagi di tab Udara & Trik)
   airJumpPower: 1,
   perfectBoost: 1,
   slowmo: 0.5,
@@ -550,7 +554,7 @@ export const MASTER_PRESETS: MasterPreset[] = [
       tint: 0,
       lift: 0,
       gain: 1,
-      vignette: 0.18,
+      vignette: 0,
       grain: 0.03,
       customColors: false,
       // Bloom & Cahaya Teredam 70%
@@ -577,6 +581,49 @@ export interface FeelPreset {
   desc: string;
   values: Partial<Tune>;
 }
+
+/** Camera mode presets — sistem "desired → smoothed" (tekan 1 / 2 / 3 saat main). */
+export const CAM_PRESETS: FeelPreset[] = [
+  {
+    name: 'Klasik',
+    desc: 'samping-belakang kanan; makin ngebut makin mundur & FOV melebar',
+    values: { camStyle: 0, camDist: 1, camLag: 1, fov: 0.95, shake: 0.5 },
+  },
+  {
+    name: 'Sekiro ✦',
+    desc: 'DEFAULT: bahu kanan — drag = orbit · scroll = zoom · auto lock-on kristal',
+    values: { camStyle: 1, camDist: 1, camLag: 1.15, fov: 0.75, shake: 0.35 },
+  },
+  {
+    name: 'Sword of the Sea',
+    desc: 'drone sinematik rendah & lebar yang menyapu vista, dutch angle',
+    values: { camStyle: 2, camDist: 1, camLag: 0.85, fov: 1.0, shake: 0.3 },
+  },
+];
+
+/** World/biome mode presets — ganti kapan saja, medan langsung terbangun ulang. */
+export const WORLD_PRESETS: FeelPreset[] = [
+  {
+    name: 'Petualangan ✦',
+    desc: 'DEFAULT: biome berganti mulus selama turun — gurun → ngarai → kuil',
+    values: { worldMode: 0 },
+  },
+  {
+    name: 'Gurun Pasir',
+    desc: 'mega dunes ridged + riak angin anisotropik, palem di kejauhan',
+    values: { worldMode: 1 },
+  },
+  {
+    name: 'Ngarai Merah',
+    desc: 'teras mesa 9 m & butte raksasa merah berlapis strata, kaktus',
+    values: { worldMode: 2 },
+  },
+  {
+    name: 'Reruntuhan Kuil',
+    desc: 'dataran tenang — platform, pilar & obelisk (20% roboh)',
+    values: { worldMode: 3 },
+  },
+];
 
 /** One-click complete "glide" presets. */
 export const FEEL_PRESETS: FeelPreset[] = [
