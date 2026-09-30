@@ -1651,6 +1651,15 @@ export function SettingsPanel({
               </div>
               <Toggle label="dua ujung (twin tail)" on={l.scarfTwin} onChange={(v) => set({ scarfTwin: v })} />
               <Toggle label="jejak cahaya dari leher" on={l.scarfGlow} onChange={(v) => set({ scarfGlow: v })} />
+              <Toggle label="jubah ala journey ✦" on={l.cloak} onChange={(v) => set({ cloak: v })} />
+              <Slider
+                label="pendar sulaman emas"
+                hint="simbol emas di jubah menyala mengikuti energi flow"
+                value={l.cloakGlow}
+                min={0}
+                max={2}
+                onChange={(v) => set({ cloakGlow: v })}
+              />
               <div className="mt-3 grid grid-cols-3 gap-2">
                 {[
                   ['Syal Pendek', { scarfLength: 1.4, scarfWidth: 0.24, scarfFlutter: 0.8 }],

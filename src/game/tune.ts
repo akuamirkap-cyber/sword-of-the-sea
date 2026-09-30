@@ -99,6 +99,10 @@ export interface Tune {
   scarfSkin: number; // 0 = cloth, 1 = ethereal
   scarfEthereal: number; // index into ETHEREAL_SKINS
 
+  // ---- JUBAH (ala Journey)
+  cloak: boolean; // jubah kain dari bahu + sulaman emas menyala + hood
+  cloakGlow: number; // kekuatan pendar sulaman emas (mengikuti energi flow)
+
   // ---- CHARACTER
   crystalSkin: number; // index into CRYSTAL_SKINS
   crystalCustom: boolean;
@@ -280,6 +284,9 @@ export const DEFAULT_TUNE: Tune = {
   scarfGlow: false,
   scarfSkin: 1,
   scarfEthereal: 0,
+
+  cloak: true, // DEFAULT: jubah traveller ala Journey menyala mengikuti flow
+  cloakGlow: 1,
 
   crystalSkin: 2, // Indigo default
   crystalCustom: false,
