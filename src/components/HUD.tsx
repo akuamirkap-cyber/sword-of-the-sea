@@ -384,7 +384,8 @@ export function Popups({ items }: { items: PopupEvent[] }) {
 }
 
 const KEYS: [string, string][] = [
-  ['SPACE', 'lompat · lagi di udara = AIR JUMP · tahan = flip'],
+  ['KLIK KIRI', 'FREESTYLE otomatis — tiap klik gaya beda, acak adil tanpa terlewat'],
+  ['KLIK KANAN / SPACE', 'lompat · lagi di udara = AIR JUMP · tahan = flip'],
   ['Q / E', 'manuver mengelak kilat kiri / kanan (hindari batu)'],
   ['S / ↓', 'AUTO frontflip · mendarat pas otomatis'],
   ['E', 'AUTO backflip (saat di udara)'],

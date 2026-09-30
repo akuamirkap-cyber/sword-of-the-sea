@@ -49,6 +49,7 @@ export interface Tune {
   floaty: number;
   spin: number;
   turn: number;
+  airTurn: number; // multiplier belok saat di udara
   speed: number;
 
   // ---- camera
@@ -239,6 +240,7 @@ export const DEFAULT_TUNE: Tune = {
   floaty: 1,
   spin: 1,
   turn: 1,
+  airTurn: 0.72,
   speed: 1,
 
   camStyle: 3, // DEFAULT = Bodycam — tekan 1/2/3/4 untuk ganti

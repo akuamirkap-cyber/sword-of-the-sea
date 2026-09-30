@@ -133,6 +133,35 @@ interface Spark {
 }
 
 const GRAV = 44;
+
+// ---------------------------------------------------------------------------
+// FREESTYLE otomatis (klik kiri): daftar gaya + KANTONG ACAK ADIL (shuffle
+// bag) — semua gaya terpakai satu kali sebelum ada yang mengulang, jadi tak
+// pernah ada freestyle yang "ga kepake". Tiap klik pasti gaya berbeda.
+// ---------------------------------------------------------------------------
+interface Freestyle {
+  name: string;
+  flip: number; // 1 backflip · -1 frontflip · 0 tanpa flip
+  spin: number; // 1 / -1 arah spin badan
+  grab: string; // pose grab (lihat GRABS)
+  board: string | null; // trik papan (lihat BOARD_TRICKS)
+}
+const FREESTYLES: Freestyle[] = [
+  { name: 'Backflip Indy', flip: 1, spin: 0, grab: 'indy', board: null },
+  { name: 'Frontflip Melon', flip: -1, spin: 0, grab: 'melon', board: null },
+  { name: 'Full Spin Method', flip: 0, spin: 1, grab: 'method', board: null },
+  { name: 'Spin Japan', flip: 0, spin: -1, grab: 'japan', board: null },
+  { name: 'Superman', flip: 0, spin: 0, grab: 'superman', board: null },
+  { name: 'Christ Air', flip: 0, spin: 0, grab: 'christ', board: null },
+  { name: 'Nose Grab Spin', flip: 0, spin: 1, grab: 'nose', board: null },
+  { name: 'Tail Grab Backflip', flip: 1, spin: 0, grab: 'tail', board: null },
+  { name: 'Kickflip Indy', flip: 0, spin: 0, grab: 'indy', board: 'kickflip' },
+  { name: 'Tre Flip Stalefish', flip: 0, spin: 1, grab: 'stalefish', board: 'tre' },
+  { name: 'Heelflip Method', flip: 0, spin: 0, grab: 'method', board: 'heelflip' },
+  { name: 'Laser Japan', flip: 0, spin: -1, grab: 'japan', board: 'laser' },
+  { name: 'Impossible Superman', flip: 0, spin: 0, grab: 'superman', board: 'impossible' },
+  { name: 'Shuv Christ', flip: 0, spin: 0, grab: 'christ', board: 'shuv' },
+];
 /** derajat → radian (tune kamera menyimpan sudut dalam derajat agar ramah UI) */
 const rad = (d: number) => (d * Math.PI) / 180;
 
@@ -421,6 +450,9 @@ export class Game {
   // arah luncur (velocity), BUKAN dari badan rider. Rider = bola: badannya
   // boleh spin trick 1080°, layar tidak ikut muter.
   private camHeading = 0;
+  // ---- freestyle klik: kantong acak adil
+  private freestyleBag: number[] = [];
+  private lastFreestyle = -1;
   private camHeadingInit = false;
   private clearLift = 0; // clearance terrain yang di-haluskan (naik cepat, turun pelan)
   /** cincin reticle lock-on (billboard, depthTest off = selalu terlihat) */
@@ -471,7 +503,6 @@ export class Game {
   private pointerStartY = 0;
   private pointerX = 0;
   private pointerY = 0;
-  private pointerDownT = 0;
 
 
   constructor(container: HTMLElement, hooks: GameHooks) {
@@ -737,12 +768,13 @@ export class Game {
     this.pointerStartY = e.clientY;
     this.pointerX = e.clientX;
     this.pointerY = e.clientY;
-    this.pointerDownT = this.time;
-    // Alto style: touch = jump, keep holding = flip.
-    // Mode "kamera lihat" (Sekiro/Bodycam): tahan = sudut kamera, jadi lompat hanya
-    // saat TAP singkat (di pointerup).
-    const camStyle = Math.round(this.tune.camStyle);
-    if (camStyle !== 1 && camStyle !== 3) this.pressJump();
+    // KLIK KIRI / TAP = FREESTYLE otomatis (kantong acak adil).
+    // KLIK KANAN = lompat (tahan = flip). Drag tetap = sudut kamera.
+    if (e.button === 2) {
+      this.pressJump();
+      return;
+    }
+    if (e.button === 0 || e.pointerType === 'touch') this.autoFreestyle();
   };
   private onPointerMove = (e: PointerEvent) => {
     if (this.pointerId !== e.pointerId) return;
@@ -772,17 +804,6 @@ export class Game {
   private onPointerUp = (e: PointerEvent) => {
     if (this.pointerId !== e.pointerId) return;
     this.pointerId = null;
-    const camStyle = Math.round(this.tune.camStyle);
-    if ((camStyle === 1 || camStyle === 3) && this.state === 'playing') {
-      // TAP singkat (bukan drag orbit/toleh) = lompat
-      const held = this.time - this.pointerDownT;
-      const moved = Math.hypot(this.pointerX - this.pointerStart, this.pointerY - this.pointerStartY);
-      if (held < 0.26 && moved < 14) {
-        this.pressJump();
-        this.releaseJump();
-      }
-      return;
-    }
     this.releaseJump();
   };
   /** SEMUA MODE: scroll = zoom orbit (bodycam lebih ketat: 0.75–1.5) */
@@ -794,6 +815,7 @@ export class Game {
     o.lastInput = this.time;
   };
 
+  private onCtx = (e: Event) => e.preventDefault();
   private onResize = () => {
     const w = this.container.clientWidth || window.innerWidth;
     const h = this.container.clientHeight || window.innerHeight;
@@ -812,6 +834,7 @@ export class Game {
     window.addEventListener('pointerup', this.onPointerUp);
     window.addEventListener('pointercancel', this.onPointerUp);
     el.addEventListener('wheel', this.onWheel, { passive: true });
+    el.addEventListener('contextmenu', this.onCtx);
     window.addEventListener('resize', this.onResize);
     if ('ResizeObserver' in window) {
       this.ro = new ResizeObserver(() => this.onResize());
@@ -1123,6 +1146,45 @@ export class Game {
   }
 
   /** AUTO COMBO: flip + (sometimes) spin + grab, all landed cleanly */
+  /** ambil gaya freestyle berikutnya: kantong dikocok ulang setelah habis —
+   *  semua gaya pasti terpakai sebelum ada yang mengulang */
+  private popFreestyle(): number {
+    if (this.freestyleBag.length === 0) {
+      for (let i = 0; i < FREESTYLES.length; i++) this.freestyleBag.push(i);
+      for (let i = this.freestyleBag.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [this.freestyleBag[i], this.freestyleBag[j]] = [this.freestyleBag[j], this.freestyleBag[i]];
+      }
+      // saat kantong baru diisi, jangan langsung mengulang gaya terakhir
+      if (this.freestyleBag.length > 1 && this.freestyleBag[0] === this.lastFreestyle) {
+        [this.freestyleBag[0], this.freestyleBag[1]] = [this.freestyleBag[1], this.freestyleBag[0]];
+      }
+    }
+    const v = this.freestyleBag.pop()!;
+    this.lastFreestyle = v;
+    return v;
+  }
+
+  /** KLIK KIRI: freestyle otomatis — gaya berikutnya dari kantong acak adil.
+   *  Di tanah = lompat dulu lalu trik menyusul di udara; rotasi disesuaikan
+   *  dengan sisa waktu udara supaya selalu mendarat aman. */
+  autoFreestyle() {
+    if (this.state !== 'playing') return;
+    if (this.grounded) this.jump();
+    const f = FREESTYLES[this.popFreestyle()];
+    const ttl = this.predictTTL();
+    if (this.tune.smartLand && ttl < 0.14) return; // terlalu rendah — fokus mendarat
+    const flip = ttl > 0.55 ? f.flip : 0;
+    const spin = ttl > 0.6 ? f.spin : 0;
+    if (f.board && ttl > 0.42) {
+      const bt = BOARD_TRICKS.find((b) => b.id === f.board);
+      if (bt) this.air.board.start(bt);
+    }
+    this.air.startAuto(flip, spin, f.grab);
+    this.popup(f.name.toUpperCase(), 'freestyle ✦', 'cyan');
+    this.audio.whoosh(0.9);
+  }
+
   pressCombo() {
     if (this.state !== 'playing') return;
     if (this.grounded) this.jump();
@@ -1212,6 +1274,7 @@ export class Game {
     window.removeEventListener('pointercancel', this.onPointerUp);
     this.renderer.domElement.removeEventListener('wheel', this.onWheel);
     window.removeEventListener('resize', this.onResize);
+    this.renderer.domElement.removeEventListener('contextmenu', this.onCtx);
     this.ro?.disconnect();
     this.audio.dispose();
     this.renderer.dispose();
@@ -2347,7 +2410,7 @@ export class Game {
     const T = this.tune;
 
     // ---- heading
-    const turnRate = (2.3 / (1 + speed * 0.011)) * T.turn * (this.grounded ? 1 : 0.72);
+    const turnRate = (2.3 / (1 + speed * 0.011)) * T.turn * (this.grounded ? 1 : clamp(T.airTurn, 0.2, 1.3));
     this.yaw += -this.steer * turnRate * dt;
     const fx = Math.sin(this.yaw);
     const fz = Math.cos(this.yaw);

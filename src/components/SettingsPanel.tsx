@@ -24,10 +24,11 @@ const BODY_PRESETS = [
   { name: 'Normal', desc: 'proporsi dewasa (default) ala Silver Surfer', v: { bodyHeight: 1, headSize: 1 } },
 ];
 
-type Tab = 'feel' | 'air' | 'book' | 'bloom' | 'light' | 'fog' | 'world' | 'water' | 'sky' | 'scarf' | 'grade' | 'cam' | 'fx';
+type Tab = 'feel' | 'move' | 'air' | 'book' | 'bloom' | 'light' | 'fog' | 'world' | 'water' | 'sky' | 'scarf' | 'grade' | 'cam' | 'fx';
 
 const TABS: [Tab, string][] = [
   ['feel', 'Hover'],
+  ['move', 'Gerakan'],
   ['air', 'Udara & Trik'],
   ['book', 'Buku Trik'],
   ['bloom', 'Bloom'],
@@ -838,6 +839,65 @@ export function SettingsPanel({
               >
                 ikuti mood langit
               </button>
+            </>
+          )}
+
+          {tab === 'move' && (
+            <>
+              <div className="mb-2 text-[9px] font-semibold uppercase tracking-[0.3em] text-sand-200/60">
+                gerakan & kontrol — carv, luncur & tanjakan
+              </div>
+              <Slider
+                label="kecepatan belok ✦"
+                hint="seberapa cepat rider carve kiri/kanan (A · D)"
+                value={l.turn}
+                min={0.3}
+                max={2.5}
+                onChange={(v) => set({ turn: v })}
+                fmt={(v) => (v < 0.7 ? 'pelayar' : v < 1.4 ? 'normal' : v < 2 ? 'lincah' : 'belut')}
+              />
+              <Slider
+                label="belok di udara"
+                hint="kontrol arah saat melayang (spin di udara tetap dari tune trik)"
+                value={l.airTurn}
+                min={0.2}
+                max={1.3}
+                onChange={(v) => set({ airTurn: v })}
+                fmt={(v) => `${Math.round(v * 100)}%`}
+              />
+              <Slider
+                label="kecepatan luncur"
+                hint="pace keseluruhan menuruni gunung"
+                value={l.speed}
+                min={0.5}
+                max={1.6}
+                onChange={(v) => set({ speed: v })}
+                fmt={(v) => (v < 0.8 ? 'santai' : v < 1.2 ? 'normal' : 'ngebut')}
+              />
+              <Slider
+                label="daya tanjakan"
+                hint="0 = tanjakan benar-benar memperlambat · 1 = tanjakan gratis"
+                value={l.climb}
+                min={0}
+                max={1}
+                onChange={(v) => set({ climb: v })}
+                fmt={(v) => (v < 0.3 ? 'realistis' : v < 0.7 ? 'seimbang' : 'bebas mendaki')}
+              />
+              <Slider
+                label="kecepatan minimum"
+                hint="jarak per detik yang tak pernah hilang walau di tanjakan"
+                value={l.minSpeed}
+                min={0}
+                max={40}
+                step={1}
+                onChange={(v) => set({ minSpeed: v })}
+                fmt={(v) => `${Math.round(v)} m/s`}
+              />
+              <div className="mt-4 rounded-2xl border border-sand-200/20 bg-black/25 px-3 py-2 text-[9px] leading-relaxed text-sand-200/65">
+                gravitasi, melayang di puncak, kecepatan salto & spin ada di tab
+                <b> Udara &amp; Trik</b> · freestyle otomatis: <b>KLIK KIRI</b> — tiap klik
+                gaya berbeda, acak adil tanpa gaya terlewat.
+              </div>
             </>
           )}
 
