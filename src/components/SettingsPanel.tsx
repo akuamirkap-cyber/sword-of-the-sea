@@ -1724,9 +1724,9 @@ export function SettingsPanel({
           {tab === 'cam' && (
             <>
               <div className="mb-2 text-[9px] font-semibold uppercase tracking-[0.3em] text-sand-200/60">
-                mode kamera — sekali klik (atau tekan 1 / 2 / 3)
+                mode kamera — sekali klik (atau tekan 1 – 4)
               </div>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 {CAM_PRESETS.map((p) => {
                   const active = Math.round(l.camStyle) === Math.round(p.values.camStyle ?? 0);
                   return (
@@ -1747,9 +1747,111 @@ export function SettingsPanel({
                   );
                 })}
               </div>
+
+              {(() => {
+                const m = Math.round(l.camStyle);
+                const cfg: {
+                  name: string;
+                  dist: 'cam0Dist' | 'cam1Dist' | 'cam2Dist' | 'cam3Dist';
+                  pitch: 'cam0Pitch' | 'cam1Pitch' | 'cam2Pitch' | 'cam3Pitch';
+                  yaw: 'cam0Yaw' | 'cam1Yaw' | 'cam2Yaw' | 'cam3Yaw';
+                  pMin: number;
+                  pMax: number;
+                  yMin: number;
+                  yMax: number;
+                  pitchHint: string;
+                }[] = [
+                  {
+                    name: 'KLASIK',
+                    dist: 'cam0Dist',
+                    pitch: 'cam0Pitch',
+                    yaw: 'cam0Yaw',
+                    pMin: -5,
+                    pMax: 45,
+                    yMin: -75,
+                    yMax: 75,
+                    pitchHint: 'tinggi mata kamera (0° = sejajar rider)',
+                  },
+                  {
+                    name: 'SEKIRO',
+                    dist: 'cam1Dist',
+                    pitch: 'cam1Pitch',
+                    yaw: 'cam1Yaw',
+                    pMin: -20,
+                    pMax: 35,
+                    yMin: -60,
+                    yMax: 60,
+                    pitchHint: 'default 2° = third-person level (bukan top-down)',
+                  },
+                  {
+                    name: 'SWORD OF THE SEA',
+                    dist: 'cam2Dist',
+                    pitch: 'cam2Pitch',
+                    yaw: 'cam2Yaw',
+                    pMin: -5,
+                    pMax: 35,
+                    yMin: -90,
+                    yMax: 90,
+                    pitchHint: 'tinggi drone sinematik',
+                  },
+                  {
+                    name: 'BODYCAM',
+                    dist: 'cam3Dist',
+                    pitch: 'cam3Pitch',
+                    yaw: 'cam3Yaw',
+                    pMin: -20,
+                    pMax: 25,
+                    yMin: -45,
+                    yMax: 45,
+                    pitchHint: 'positif = menunduk ke lintasan turun',
+                  },
+                ];
+                const c = cfg[m] ?? cfg[0];
+                return (
+                  <div className="mt-4 rounded-2xl border border-sand-200/20 bg-black/25 px-3 py-3">
+                    <div className="mb-1 text-[9px] font-semibold uppercase tracking-[0.3em] text-sand-200/70">
+                      penyetelan mode aktif — {c.name}
+                    </div>
+                    <Slider
+                      label="jarak mode ini"
+                      hint="mengalikan jarak khusus mode ini"
+                      value={l[c.dist]}
+                      min={0.5}
+                      max={1.8}
+                      onChange={(v) => set({ [c.dist]: v } as Partial<Tune>)}
+                      fmt={(v) => `×${v.toFixed(2)}`}
+                    />
+                    <Slider
+                      label="sudut vertikal"
+                      hint={c.pitchHint}
+                      value={l[c.pitch]}
+                      min={c.pMin}
+                      max={c.pMax}
+                      step={1}
+                      onChange={(v) => set({ [c.pitch]: v } as Partial<Tune>)}
+                      fmt={(v) => `${Math.round(v)}°`}
+                    />
+                    <Slider
+                      label="sudut horizontal"
+                      hint="0° = tepat di belakang · makin besar makin serong"
+                      value={l[c.yaw]}
+                      min={c.yMin}
+                      max={c.yMax}
+                      step={1}
+                      onChange={(v) => set({ [c.yaw]: v } as Partial<Tune>)}
+                      fmt={(v) => `${Math.round(v)}°`}
+                    />
+                    <div className="mt-1 text-[8px] leading-relaxed uppercase tracking-[0.14em] text-sand-200/40">
+                      di dalam game: scroll = zoom instan · drag = sudut · diamkan → kembali
+                      ke penyetelan ini
+                    </div>
+                  </div>
+                );
+              })()}
+
               <Slider
-                label="jarak kamera"
-                hint="mengalikan gaya kamera yang dipilih"
+                label="jarak kamera (semua mode)"
+                hint="mengalikan semua gaya kamera"
                 value={l.camDist}
                 min={0.6}
                 max={1.7}

@@ -52,12 +52,28 @@ export interface Tune {
   speed: number;
 
   // ---- camera
-  camStyle: number; // 0 = Klasik, 1 = Sekiro (orbit + lock-on), 2 = Sword of the Sea (sinematik)
+  camStyle: number; // 0 = Klasik, 1 = Sekiro (third-person + lock-on), 2 = Sword of the Sea (sinematik), 3 = Bodycam
   worldMode: number; // 0 = Petualangan (auto blend biome), 1 = Gurun Pasir, 2 = Ngarai Merah, 3 = Reruntuhan Kuil
   camDist: number;
   camLag: number;
   fov: number;
   shake: number;
+
+  // ---- penyetelan PER MODE kamera (jarak = pengali · sudut dalam DERAJAT).
+  // Yaw: 0 = tepat di belakang rider, positif = makin ke kanan (serong).
+  // Pitch: positif = kamera makin tinggi / menunduk, negatif = rendah / menengadah.
+  cam0Dist: number; // Klasik — jarak
+  cam0Pitch: number; // Klasik — sudut vertikal
+  cam0Yaw: number; // Klasik — sudut horizontal (default 40° = samping-belakang kanan asli)
+  cam1Dist: number; // Sekiro — jarak dasar
+  cam1Pitch: number; // Sekiro — sudut vertikal dasar (default 2° ≈ level → third-person)
+  cam1Yaw: number; // Sekiro — sudut horizontal dasar
+  cam2Dist: number; // Sword of the Sea — jarak
+  cam2Pitch: number; // Sword of the Sea — sudut vertikal
+  cam2Yaw: number; // Sword of the Sea — sudut horizontal
+  cam3Dist: number; // Bodycam — jarak (mengalikan offset 0.85 m dari punggung)
+  cam3Pitch: number; // Bodycam — sudut vertikal (positif = menunduk ke lintasan)
+  cam3Yaw: number; // Bodycam — sudut horizontal (toleh kiri/kanan)
 
   // ---- fx
   particles: number;
@@ -212,12 +228,27 @@ export const DEFAULT_TUNE: Tune = {
   turn: 1,
   speed: 1,
 
-  camStyle: 1, // DEFAULT = Sekiro (orbit + lock-on) — tekan 1/2/3 untuk ganti
+  camStyle: 1, // DEFAULT = Sekiro (third-person + lock-on) — tekan 1/2/3/4 untuk ganti
   worldMode: 0, // DEFAULT = Petualangan (biome berganti mulus sepanjang perjalanan)
   camDist: 1,
   camLag: 1.15,
   fov: 0.75,
   shake: 0.35,
+
+  // default per mode: Klasik & SotS ≈ framing asli · Sekiro 2° = third-person
+  // level (bukan top-down) · Bodycam 6° = menunduk sedikit ke lintasan turun
+  cam0Dist: 1,
+  cam0Pitch: 17,
+  cam0Yaw: 40,
+  cam1Dist: 1,
+  cam1Pitch: 2,
+  cam1Yaw: 0,
+  cam2Dist: 1,
+  cam2Pitch: 9,
+  cam2Yaw: 0,
+  cam3Dist: 1,
+  cam3Pitch: 6,
+  cam3Yaw: 0,
 
   particles: 1,
   trails: 1,
@@ -582,7 +613,8 @@ export interface FeelPreset {
   values: Partial<Tune>;
 }
 
-/** Camera mode presets — sistem "desired → smoothed" (tekan 1 / 2 / 3 saat main). */
+/** Camera mode presets — sistem "desired → smoothed" (tekan 1 / 2 / 3 / 4 saat main).
+ *  Preset TIDAK menimpa camXPitch/Yaw/Dist — penyetelan per mode milik user tetap. */
 export const CAM_PRESETS: FeelPreset[] = [
   {
     name: 'Klasik',
@@ -591,13 +623,18 @@ export const CAM_PRESETS: FeelPreset[] = [
   },
   {
     name: 'Sekiro ✦',
-    desc: 'DEFAULT: bahu kanan — drag = orbit · scroll = zoom · lock-on kristal (menapak)',
+    desc: 'DEFAULT: third-person di bahu — drag = orbit · scroll = zoom · lock-on kristal',
     values: { camStyle: 1, camDist: 1, camLag: 1.15, fov: 0.75, shake: 0.35 },
   },
   {
     name: 'Sword of the Sea',
     desc: 'drone sinematik rendah & lebar yang menyapu vista, dutch angle',
     values: { camStyle: 2, camDist: 1, camLag: 0.85, fov: 1.0, shake: 0.3 },
+  },
+  {
+    name: 'Bodycam ●',
+    desc: 'terpasang di dada: dekat, FOV lebar, goyangan handheld — drag = toleh',
+    values: { camStyle: 3, camDist: 1, camLag: 1.6, fov: 0.8, shake: 0.55 },
   },
 ];
 

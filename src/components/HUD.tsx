@@ -32,6 +32,9 @@ export function Hud({
       {/* speed streaks */}
       <div className="speedlines pointer-events-none absolute inset-0 z-10" style={{ opacity: speedLines }} />
 
+      {/* bodycam frame (mode kamera 4) */}
+      {stats.camStyle === 3 && <BodycamOverlay stats={stats} />}
+
       {/* top left : score */}
       <div className="pointer-events-none absolute top-5 left-5 z-20 sm:top-7 sm:left-8">
         <Label>score</Label>
@@ -372,10 +375,35 @@ const KEYS: [string, string][] = [
   ['A / D', 'carve · spin di udara'],
   ['SHIFT', 'boost · GRAB di udara'],
   ['W / ↑', 'air jump juga (pakai 10 flow)'],
-  ['1 / 2 / 3', 'mode kamera: klasik · SEKIRO · sword of the sea'],
-  ['DRAG · SCROLL', 'di mode Sekiro: orbit kamera · zoom'],
+  ['1 / 2 / 3 / 4', 'kamera: klasik · SEKIRO third-person · sinematik · BODYCAM'],
+  ['DRAG · SCROLL', 'semua mode: drag = sudut kamera · scroll = zoom'],
   ['R · T', 'run baru · setting'],
 ];
+
+/** Overlay bodycam: sudut bingkai + REC + baterai (dari shield) — pure DOM. */
+function BodycamOverlay({ stats }: { stats: HudStats }) {
+  const t = Math.max(0, stats.runTime);
+  const mm = String(Math.floor(t / 60)).padStart(2, '0');
+  const ss = String(Math.floor(t % 60)).padStart(2, '0');
+  const bat = Math.max(0, Math.round((stats.shield / Math.max(1, stats.maxShield)) * 100));
+  const corner = 'absolute h-7 w-7 border-sand-50/70';
+  return (
+    <div className="pointer-events-none absolute inset-0 z-10 font-mono">
+      <div className={`${corner} top-4 left-4 rounded-tl-md border-t-2 border-l-2`} />
+      <div className={`${corner} top-4 right-4 rounded-tr-md border-t-2 border-r-2`} />
+      <div className={`${corner} bottom-4 left-4 rounded-bl-md border-b-2 border-l-2`} />
+      <div className={`${corner} bottom-4 right-4 rounded-br-md border-b-2 border-r-2`} />
+      <div className="absolute top-[4.6rem] right-9 flex items-center gap-2 text-[11px] tracking-[0.18em] text-sand-50/90">
+        <span className="h-2 w-2 animate-pulse rounded-full bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.9)]" />
+        REC {mm}:{ss}
+        <span className="ml-2 text-sand-50/60">BAT {bat}%</span>
+      </div>
+      <div className="absolute bottom-[4.2rem] right-9 text-[9px] tracking-[0.26em] text-sand-50/50">
+        SOTS · BODYCAM · 1080p60
+      </div>
+    </div>
+  );
+}
 
 export function StartScreen({
   best,

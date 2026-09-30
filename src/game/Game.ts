@@ -101,6 +101,9 @@ export interface HudStats {
   sectorSubtitle: string;
   altitudeDrop: number;
   crystalsCollected: number;
+  // ---- kamera aktif (untuk overlay REC bodycam) + durasi run
+  camStyle: number;
+  runTime: number;
 }
 
 export interface PopupEvent {
@@ -125,6 +128,8 @@ interface Spark {
 }
 
 const GRAV = 44;
+/** derajat → radian (tune kamera menyimpan sudut dalam derajat agar ramah UI) */
+const rad = (d: number) => (d * Math.PI) / 180;
 
 function safeGet(key: string): string | null {
   try {
@@ -364,6 +369,7 @@ export class Game {
   private timeScale = 1;
   private trickLabel = '';
   private bobT = 0;
+  private runT = 0; // durasi run aktif (untuk timer REC bodycam)
 
   // ---- camera
   private camPos = new THREE.Vector3();
@@ -371,8 +377,10 @@ export class Game {
   private camRoll = 0;
   private camFov = 66;
   private lookSmooth = new THREE.Vector3();
-  // ---- kamera Sekiro: state orbit + lock-on (kristal energi)
-  private orbit = { yaw: 0, pitch: 0.14, zoom: 1, lastInput: -10 };
+  // ---- kamera Sekiro/bodycam: state orbit sesi (drag/scroll) + lock-on (kristal energi).
+  // Pitch dasar kini datang dari tune per-mode (default Sekiro 2° = third-person),
+  // offset orbit ini kembali ke 0 saat idle.
+  private orbit = { yaw: 0, pitch: 0, zoom: 1, lastInput: -10 };
   private lockTarget: { x: number; y: number; z: number; collected: boolean } | null = null;
   private lockCooldown = 0;
   // ---- kamera "drone pengikut mobil": heading MILIK KAMERA sendiri — dari
@@ -580,10 +588,11 @@ export class Game {
     }
     if (e.code === 'KeyS' || e.code === 'ArrowDown') this.pressStyle(-1); // auto frontflip
     if (e.code === 'KeyF') this.pressCombo(); // auto combo
-    // ---- gaya kamera (1 = Epik · 2 = Dekat · 3 = Sekiro)
+    // ---- gaya kamera (1 = Klasik · 2 = Sekiro · 3 = Sword of the Sea · 4 = Bodycam)
     if (e.code === 'Digit1') this.setCamStyle(0);
     if (e.code === 'Digit2') this.setCamStyle(1);
     if (e.code === 'Digit3') this.setCamStyle(2);
+    if (e.code === 'Digit4') this.setCamStyle(3);
     // ---- skate board tricks (J K L I U O M , N)
     const bt = BOARD_TRICKS.find((b) => b.key === e.code);
     if (bt) this.pressBoardTrick(bt.id);
@@ -612,8 +621,10 @@ export class Game {
     this.pointerY = e.clientY;
     this.pointerDownT = this.time;
     // Alto style: touch = jump, keep holding = flip.
-    // Mode Sekiro: tahan = orbit kamera, jadi lompat hanya saat TAP singkat (di pointerup).
-    if (this.tune.camStyle !== 1) this.pressJump();
+    // Mode "kamera lihat" (Sekiro/Bodycam): tahan = sudut kamera, jadi lompat hanya
+    // saat TAP singkat (di pointerup).
+    const camStyle = Math.round(this.tune.camStyle);
+    if (camStyle !== 1 && camStyle !== 3) this.pressJump();
   };
   private onPointerMove = (e: PointerEvent) => {
     if (this.pointerId !== e.pointerId) return;
@@ -621,26 +632,31 @@ export class Game {
     const dy = e.clientY - this.pointerY;
     this.pointerX = e.clientX;
     this.pointerY = e.clientY;
-    // ---- SEKIRO: drag = orbit kamera
-    if (this.tune.camStyle === 1 && this.state === 'playing') {
-      const sens = 0.0052;
-      const o = this.orbit;
-      o.yaw -= dx * sens;
-      o.pitch = clamp(o.pitch + dy * sens * 0.7, -0.3, 1.1);
-      o.lastInput = this.time;
-      // drag > 40 px memutus lock-on (kontrol manual menang)
-      const dragDist = Math.hypot(e.clientX - this.pointerStart, e.clientY - this.pointerStartY);
-      if (dragDist > 40 && this.lockTarget) {
-        this.lockTarget = null;
-        this.lockCooldown = 2.5;
-      }
+    if (this.state !== 'playing') return;
+    // ---- SEMUA MODE: drag = sudut kamera (orbit/toleh).
+    // Mouse selalu boleh; sentuh hanya di mode Sekiro/Bodycam (di mode lain sentuh
+    // dipakai penuh untuk lompat/flip).
+    const camStyle = Math.round(this.tune.camStyle);
+    if (e.pointerType === 'touch' && camStyle !== 1 && camStyle !== 3) return;
+    const dragDist = Math.hypot(e.clientX - this.pointerStart, e.clientY - this.pointerStartY);
+    if (dragDist < 9) return; // deadzone: klik-lompat tak sengaja memutar kamera
+    const sens = 0.0052;
+    const o = this.orbit;
+    o.yaw -= dx * sens;
+    o.pitch = clamp(o.pitch + dy * sens * 0.7, -0.5, 0.85);
+    o.lastInput = this.time;
+    // drag > 40 px memutus lock-on (kontrol manual menang)
+    if (dragDist > 40 && this.lockTarget) {
+      this.lockTarget = null;
+      this.lockCooldown = 2.5;
     }
   };
   private onPointerUp = (e: PointerEvent) => {
     if (this.pointerId !== e.pointerId) return;
     this.pointerId = null;
-    if (this.tune.camStyle === 1 && this.state === 'playing') {
-      // TAP singkat (bukan drag orbit) = lompat
+    const camStyle = Math.round(this.tune.camStyle);
+    if ((camStyle === 1 || camStyle === 3) && this.state === 'playing') {
+      // TAP singkat (bukan drag orbit/toleh) = lompat
       const held = this.time - this.pointerDownT;
       const moved = Math.hypot(this.pointerX - this.pointerStart, this.pointerY - this.pointerStartY);
       if (held < 0.26 && moved < 14) {
@@ -651,11 +667,12 @@ export class Game {
     }
     this.releaseJump();
   };
-  /** SEKIRO: scroll = zoom orbit (0.55–2.2) */
+  /** SEMUA MODE: scroll = zoom orbit (bodycam lebih ketat: 0.75–1.5) */
   private onWheel = (e: WheelEvent) => {
-    if (this.tune.camStyle !== 1 || this.state !== 'playing') return;
+    if (this.state !== 'playing') return;
     const o = this.orbit;
-    o.zoom = clamp(o.zoom * (1 - e.deltaY * 0.001), 0.55, 2.2);
+    const [lo, hi] = Math.round(this.tune.camStyle) === 3 ? [0.75, 1.5] : [0.55, 2.2];
+    o.zoom = clamp(o.zoom * (1 - e.deltaY * 0.001), lo, hi);
     o.lastInput = this.time;
   };
 
@@ -694,6 +711,7 @@ export class Game {
     this.score = 0;
     this.combo = 0;
     this.distance = 0;
+    this.runT = 0;
     this.flow = 45;
     this.shield = this.maxShield;
     this.shieldCooldown = 0;
@@ -713,6 +731,7 @@ export class Game {
     this.chain = 0;
     this.flow = 45;
     this.distance = 0;
+    this.runT = 0;
     this.shield = this.maxShield;
     this.shieldCooldown = 0;
     this.crystalsCollected = 0;
@@ -734,16 +753,22 @@ export class Game {
     }
   }
 
-  /** ganti mode kamera: 0 = Klasik · 1 = Sekiro · 2 = Sword of the Sea */
+  /** ganti mode kamera: 0 = Klasik · 1 = Sekiro · 2 = Sword of the Sea · 3 = Bodycam */
   setCamStyle(s: number) {
-    const style = clamp(Math.round(s), 0, 2);
-    if (style === clamp(Math.round(this.tune.camStyle), 0, 2)) return;
+    const style = clamp(Math.round(s), 0, 3);
+    if (style === clamp(Math.round(this.tune.camStyle), 0, 3)) return;
     this.setTune({ camStyle: style });
-    const names = ['KAMERA KLASIK', 'KAMERA SEKIRO ✦', 'SWORD OF THE SEA ✦'];
+    // orbit sesi di-nol-kan (yaw/pitch) saat pindah mode supaya framing mode baru
+    // langsung murni; zoom biarkan — itu preferensi jarak user.
+    this.orbit.yaw = 0;
+    this.orbit.pitch = 0;
+    this.lockTarget = null;
+    const names = ['KAMERA KLASIK', 'KAMERA SEKIRO ✦', 'SWORD OF THE SEA ✦', 'KAMERA BODYCAM ●REC'];
     const descs = [
       'samping-belakang kanan, FOV melebar saat ngebut',
-      'drag = orbit · scroll = zoom · lock-on kristal (menapak)',
+      'third-person di bahu — drag = orbit · scroll = zoom · lock-on kristal',
       'drone sinematik lebar yang menyapu vista',
+      'terpasang di dada — drag = toleh · scroll = maju/mundur',
     ];
     this.popup(names[style], descs[style], 'cyan');
   }
@@ -1485,6 +1510,7 @@ export class Game {
     }
 
     this.statTick++;
+    if (this.state === 'playing') this.runT += dt;
     if (this.statTick % 4 === 0) {
       const sec = getMountainSector(this.distance);
       if (sec.name !== this.lastSectorName) {
@@ -1538,6 +1564,8 @@ export class Game {
         sectorSubtitle: sec.subtitle,
         altitudeDrop: Math.max(0, -this.pos.y),
         crystalsCollected: this.crystalsCollected,
+        camStyle: clamp(Math.round(this.tune.camStyle), 0, 3),
+        runTime: this.runT,
       });
     }
 
@@ -2931,7 +2959,7 @@ export class Game {
     this.camHeading += dh * (1 - Math.exp(-dt * kHead));
     const fx = Math.sin(this.camHeading);
     const fz = Math.cos(this.camHeading);
-    const mode = clamp(Math.round(T.camStyle), 0, 2);
+    const mode = clamp(Math.round(T.camStyle), 0, 3);
     // set oleh cabang 'playing' di bawah
     let swayScale = 1;
     let fovOverride: number | null = null;
@@ -2951,68 +2979,80 @@ export class Game {
       this.lookSmooth.lerp(this.pos, 1 - Math.exp(-dt * 4));
       this.lockRing.visible = false;
     } else {
-      // ============================ PLAYING: mode 0 Klasik · 1 Sekiro · 2 Sword of the Sea
+      // ============================ PLAYING: mode 0 Klasik · 1 Sekiro · 2 Sword of the Sea · 3 Bodycam
       const px = this.pos.x;
       const py = this.pos.y;
       const pz = this.pos.z;
       const lean = this.steer; // -1..1 kemiringan rider saat belok
       const air = Math.min(this.airTime, 2.2);
       const kMul = T.camLag / 1.15; // slider "kelembutan kamera" mengalikan semua k
+      const o = this.orbit;
       let kPos = 3.5;
       let kLook = 5;
       let clearance = 2.0;
 
+      // ---- SEMUA MODE: drag/scroll memberi offset orbit sesi ini; diam > 1.6 dtk
+      // → offset kembali pelan ke 0 (framing dasar per-mode dari Settings ⚙️ → Kamera).
+      if (this.time - o.lastInput > 1.6) {
+        o.yaw += (0 - o.yaw) * (1 - Math.exp(-dt * 1.3));
+        o.pitch += (0 - o.pitch) * (1 - Math.exp(-dt * 1.3));
+      }
+
       if (mode === 0) {
         // ---------------- KLASIK ----------------
-        // diam di samping-belakang kanan; makin cepat → mundur & FOV melebar
+        // polar: yaw = seberapa serong (0° = tepat di belakang), pitch = tinggi
+        // mata. Default 40°/17° = framing asli samping-belakang kanan.
         kPos = 3.5;
         kLook = 5;
         swayScale = 0.6;
-        const back = (9 + 2.5 * sn) * T.camDist;
-        const side = 7.5 + sn;
-        this.t2.set(px + -fz * side - fx * back, py + 5 + 1.5 * sn, pz + fx * side - fz * back);
+        const yaw = rad(T.cam0Yaw) + o.yaw;
+        const pitch = clamp(rad(T.cam0Pitch) + o.pitch, -0.12, 0.85);
+        const dist = (11.7 + 2.5 * sn) * T.camDist * T.cam0Dist * o.zoom;
+        const rx = -fz;
+        const rz = fx; // vektor kanan rider
+        const dirX = -fx * Math.cos(yaw) + rx * Math.sin(yaw);
+        const dirZ = -fz * Math.cos(yaw) + rz * Math.sin(yaw);
+        this.t2.set(px + dirX * dist, py + 1.2 + Math.tan(pitch) * dist, pz + dirZ * dist);
         this.t3.set(px + fx * 7, py + 1.2, pz + fz * 7);
         fovOverride = 55 + (10 * sn + (this.boosting ? 4 : 0)) * (T.fov / 0.95);
         rollOverride = -0.05 * lean;
         this.lockRing.visible = false;
       } else if (mode === 1) {
-        // ---------------- SEKIRO ----------------
-        // over-the-shoulder + orbit (drag/scroll) + auto lock-on kristal energi
+        // ---------------- SEKIRO (third-person) ----------------
+        // FIX top-down: pitch dasar rendah (default 2°) dan titik pandang maju
+        // SEIRING jarak → zoom out sejauh apa pun framing tetap "di bahu" level,
+        // bukan mengintip dari atas. Drag = orbit, scroll = zoom, lock-on kristal.
         kPos = 14;
         kLook = 16;
         clearance = 0.7;
         swayScale = 0.35;
-        const o = this.orbit;
         this.updateLockOn();
-        const idle = this.time - o.lastInput > 1.4;
         if (this.lockTarget) {
-          // yaw diarahkan ke target (frame rider) & pitch ke 0.2 — khas Sekiro:
-          // rider DAN target sama-sama masuk frame
+          // yaw diarahkan ke target (frame rider) & pitch kembali level — khas
+          // Sekiro: rider DAN target sama-sama masuk frame
           const lt = this.lockTarget;
           let rel = Math.atan2(lt.x - px, lt.z - pz) - this.camHeading;
           rel = Math.atan2(Math.sin(rel), Math.cos(rel));
-          const yawTgt = clamp(rel * 0.6, -0.9, 0.9);
+          const yawTgt = clamp(rel * 0.6 - rad(T.cam1Yaw), -1.1, 1.1);
           o.yaw += (yawTgt - o.yaw) * (1 - Math.exp(-dt * 2.5));
-          o.pitch += (0.2 - o.pitch) * (1 - Math.exp(-dt * 3));
-        } else if (idle) {
-          // tidak ada input > 1.4 dtk → auto re-center pelan
-          o.yaw += (0 - o.yaw) * (1 - Math.exp(-dt * 1.3));
-          o.pitch += (0.14 - o.pitch) * (1 - Math.exp(-dt * 1.3));
+          o.pitch += (0 - o.pitch) * (1 - Math.exp(-dt * 3));
         }
-        const az = this.camHeading + Math.PI + o.yaw;
-        const cosP = Math.cos(o.pitch);
-        const dist = 5.4 * o.zoom * T.camDist + (!this.grounded ? 0.8 : 0);
+        const az = this.camHeading + Math.PI + rad(T.cam1Yaw) + o.yaw;
+        const pitch = clamp(rad(T.cam1Pitch) + o.pitch, -0.35, 0.7);
+        const dist = 4.6 * T.cam1Dist * T.camDist * o.zoom + (!this.grounded ? 0.8 : 0);
         const shoulder = 0.85; // offset ke kanan → rider di kiri frame
+        const cosP = Math.cos(pitch);
         this.t2.set(
           px + Math.sin(az) * dist * cosP + Math.cos(az) * shoulder,
-          py + 1.9 + Math.sin(o.pitch) * dist,
+          py + 1.55 + Math.sin(pitch) * dist,
           pz + Math.cos(az) * dist * cosP - Math.sin(az) * shoulder,
         );
-        // look: 3.5 m ke arah depan kamera + offset bahu; campur target 0.35 bila lock
+        // pandangan maju ∝ jarak: makin di-zoom out makin jauh menatap lurus
+        const ahead = 2.2 + dist * 0.55;
         this.t3.set(
-          px - Math.sin(az) * 3.5 + Math.cos(az) * shoulder * 0.55,
-          py + 1.05,
-          pz - Math.cos(az) * 3.5 - Math.sin(az) * shoulder * 0.55,
+          px - Math.sin(az) * ahead + Math.cos(az) * shoulder * 0.55,
+          py + 1.35,
+          pz - Math.cos(az) * ahead - Math.sin(az) * shoulder * 0.55,
         );
         if (this.lockTarget) {
           const lt = this.lockTarget;
@@ -3022,16 +3062,17 @@ export class Game {
         } else this.lockRing.visible = false;
         fovOverride = (50 + 4 * sn) * (0.6 + 0.4 * (T.fov / 0.75));
         rollOverride = -0.04 * lean;
-      } else {
+      } else if (mode === 2) {
         // ---------------- SWORD OF THE SEA (sinematik) ----------------
         // rendah & lebar; sweep organik dua sinus; rule of thirds; dutch angle
         kPos = 1.8;
         kLook = 2.6;
         swayScale = 0.9;
         const sweep = Math.sin(this.time * 0.11) * 0.75 + Math.sin(this.time * 0.037 + 1.3) * 0.45;
-        const cyaw = this.camHeading + Math.PI + sweep + lean * 0.15;
-        const dist = (15 + 5 * sn + 5 * air) * T.camDist;
-        const height = 2.4 + 0.8 * sn + 3.2 * air;
+        const cyaw = this.camHeading + Math.PI + sweep + lean * 0.15 + rad(T.cam2Yaw) + o.yaw;
+        const pitch = clamp(rad(T.cam2Pitch) + o.pitch, -0.12, 0.75);
+        const dist = (15 + 5 * sn + 5 * air) * T.camDist * T.cam2Dist * o.zoom;
+        const height = dist * Math.tan(pitch) + 3.2 * air;
         this.t2.set(px + Math.sin(cyaw) * dist, py + height, pz + Math.cos(cyaw) * dist);
         const lat = -1.5 * lean - 2 * Math.sin(sweep + lean * 0.25); // rider jatuh di sepertiga frame
         this.t3.set(
@@ -3041,6 +3082,35 @@ export class Game {
         );
         fovOverride = 74 + 10 * sn * (T.fov / 0.75);
         rollOverride = -0.07 * lean + 0.015 * Math.sin(this.time * 0.17);
+        this.lockRing.visible = false;
+      } else {
+        // ---------------- BODYCAM ----------------
+        // kamera action-cam terpasang di dada rider: super dekat, FOV lebar,
+        // ikutan kencang + goyangan handheld halus. Drag = toleh sekeliling,
+        // scroll = sedikit maju/mundur. ROLL mengikuti carve → terasa "di badan".
+        kPos = 24;
+        kLook = 30;
+        clearance = 0.45;
+        swayScale = 0.55;
+        const az = this.camHeading + Math.PI + rad(T.cam3Yaw) + o.yaw;
+        const pitch = clamp(rad(T.cam3Pitch) + o.pitch, -0.5, 0.6);
+        const dist = 0.85 * T.cam3Dist * o.zoom;
+        const chest = 0.75 + 1.05 * T.bodyHeight; // tinggi dada mengikuti postur rider
+        this.t2.set(
+          px + Math.sin(az) * dist,
+          py + chest + Math.sin(pitch) * 1.2,
+          pz + Math.cos(az) * dist,
+        );
+        // menatap jauh ke lintasan — pitch mengarah turun mengikuti lereng
+        const ahead = 30;
+        this.t3.set(
+          px - Math.sin(az) * ahead,
+          py + chest + 0.25 - Math.tan(pitch) * ahead,
+          pz - Math.cos(az) * ahead,
+        );
+        // FOV sangat lebar + "napas" halus khas lensa action-cam
+        fovOverride = (94 + 8 * sn) * (0.7 + 0.3 * (T.fov / 0.75)) + Math.sin(this.time * 1.9) * 1.2;
+        rollOverride = -0.1 * lean + 0.012 * Math.sin(this.time * 0.9);
         this.lockRing.visible = false;
       }
 

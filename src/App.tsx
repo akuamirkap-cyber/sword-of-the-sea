@@ -47,6 +47,8 @@ const INITIAL: HudStats = {
   sectorSubtitle: 'Pasir lembut',
   altitudeDrop: 0,
   crystalsCollected: 0,
+  camStyle: 1,
+  runTime: 0,
 };
 
 export default function App() {
@@ -220,7 +222,7 @@ export default function App() {
       {state === 'playing' && !showTune && (
         <div className="pointer-events-none absolute bottom-6 left-5 z-20 hidden sm:block sm:left-8">
           <div className="text-[9px] tracking-[0.34em] text-sand-200/50 uppercase">
-            space lompat/air jump · Q/E elak batu · J K L I U O flip pedang · Z X C V B G grab · S E F auto · 1/2/3 kamera (Sekiro: drag orbit, scroll zoom) · T setting
+            space lompat/air jump · Q/E elak batu · J K L I U O flip pedang · Z X C V B G grab · S E F auto · 1/2/3/4 kamera · drag = sudut kamera · scroll = zoom · T setting
           </div>
         </div>
       )}
