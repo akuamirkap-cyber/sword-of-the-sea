@@ -304,6 +304,8 @@ export class Game {
   private scarfB = new Scarf(1.7);
   /** ekor panjang slugpup — tali verlet dari pangkal punggung (skin Slugpup) */
   private scarfTail = new Scarf(3.1);
+  /** ujung pendek syal yang terurai di depan dada — look "sedang memakai syal" */
+  private scarfFront = new Scarf(4.3);
   /** bentuk SLUGPUP: target & blend mulus (0 = humanoid, 1 = pup penuh) */
   private pupOn = false;
   private pupBlend = 0;
@@ -626,6 +628,7 @@ export class Game {
     this.scene.add(this.scarfA.mesh);
     this.scene.add(this.scarfB.mesh);
     this.scene.add(this.scarfTail.mesh);
+    this.scene.add(this.scarfFront.mesh);
     // ekor slugpup: kain putih pucat, bukan selendang warna
     this.scarfTail.setColor('#e9eef4');
     this.scarfTail.setSkin(false, 0);
@@ -1855,6 +1858,7 @@ export class Game {
       const hex = SCARF_COLORS[T.scarfColor % SCARF_COLORS.length].hex;
       this.scarfA.setColor(hex);
       this.scarfB.setColor(hex);
+      this.scarfFront.setColor(hex);
     }
     // ---- skin: cloth or ethereal (with palette)
     const skinKey = Math.round(T.scarfSkin) * 100 + Math.round(T.scarfEthereal);
@@ -1863,6 +1867,7 @@ export class Game {
       const eth = Math.round(T.scarfSkin) === 1;
       this.scarfA.setSkin(eth, Math.round(T.scarfEthereal));
       this.scarfB.setSkin(eth, Math.round(T.scarfEthereal));
+      this.scarfFront.setSkin(eth, Math.round(T.scarfEthereal));
     }
     // ---- kerah slayer melingkar di leher: warna/tampilan mengikuti mode
     {
@@ -1887,8 +1892,9 @@ export class Game {
     this.scarfBack.set(-fx, 0, -fz);
     this.scarfLat.set(fz, 0, -fx);
     this.rider.neck.getWorldPosition(this.scarfAnchor);
-    this.scarfAnchor.y -= 0.015;
-    this.scarfAnchor.addScaledVector(this.scarfBack, 0.052); // dari bibir belakang kerah
+    // ekor panjang keluar dari bibir belakang LILITAN kerah (bukan dasar leher)
+    this.scarfAnchor.y += 0.07;
+    this.scarfAnchor.addScaledVector(this.scarfBack, 0.066);
     const speed = Math.hypot(this.vel.x, this.vel.z);
     const opts = { length: T.scarfLength, width: T.scarfWidth, flutter: T.scarfFlutter };
 
@@ -1904,6 +1910,18 @@ export class Game {
         width: opts.width * 0.9,
       }, this.vel);
     }
+
+    // ---- UJUNG PENDEK SYAL di depan dada: syal sungguhan punya dua ujung —
+    // satu panjang berkibar ke belakang, satu pendek terurai di dada, keluar
+    // dari bawah lilitan kerah. Fisika verlet sama (tertiup angin sembunyi).
+    this.t1.copy(this.scarfAnchor).addScaledVector(this.scarfBack, -0.13);
+    this.t1.y -= 0.02;
+    this.t2.set(-this.scarfBack.x * 0.6, -1, -this.scarfBack.z * 0.6).normalize();
+    this.scarfFront.update(dt, this.t1, this.t2, speed, this.time, {
+      length: 0.36 + T.scarfLength * 0.07,
+      width: 0.05 + T.scarfWidth * 0.75,
+      flutter: 0.75,
+    }, this.vel);
 
     // ---- bentuk SLUGPUP: morph tubuh (a.pup) + ekor tebal dari pangkal
     // punggung. Aktif otomatis saat skin karakter = Slugpup (Rain World).
@@ -1930,8 +1948,10 @@ export class Game {
     const embGlow = T.scarfEmbroideryGlow * (0.35 + 0.65 * clamp(this.flow / 100, 0, 1));
     this.scarfA.setEmbroidery(emb);
     this.scarfB.setEmbroidery(emb);
+    this.scarfFront.setEmbroidery(emb);
     this.scarfA.setGoldGlow(embGlow);
     this.scarfB.setGoldGlow(embGlow);
+    this.scarfFront.setGoldGlow(embGlow);
 
     // ---- ethereal: motes of light drift off the veil
     if (this.scarfA.ethereal && T.particles > 0.01) {

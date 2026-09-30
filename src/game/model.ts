@@ -247,6 +247,58 @@ function limbGeo(L: number, rTop: number, rMid: number, rEnd: number, midAt = 0.
   return g;
 }
 
+/**
+ * Pita kain yang DILILIT helix di sekeliling leher — dipakai kerah slayer.
+ * Menghasilkan permukaan luar + dalam + tutup ujung, jadi terlihat sebagai
+ * lilitan kain bervolume dari sudut mana pun.
+ */
+function helixRibbonGeo(o: {
+  turns: number;
+  y0: number;
+  y1: number;
+  r0: number;
+  r1: number;
+  width: number;
+  thick: number;
+  start: number;
+  wobble?: number;
+  segs?: number;
+}): THREE.BufferGeometry {
+  const N = o.segs ?? 76;
+  const w = o.width / 2;
+  const pos: number[] = [];
+  const idx: number[] = [];
+  const ring = (t: number, side: number): [number, number, number] => {
+    const th = o.start + t * o.turns * Math.PI * 2;
+    const r =
+      o.r0 + (o.r1 - o.r0) * t + (o.wobble ?? 0) * Math.sin(th * 3 + t * 5) + side * o.thick * 0.5;
+    return [Math.sin(th) * r, o.y0 + (o.y1 - o.y0) * t, Math.cos(th) * r];
+  };
+  for (const side of [1, -1]) {
+    const base = pos.length / 3;
+    for (let i = 0; i <= N; i++) {
+      const [x, y, z] = ring(i / N, side);
+      pos.push(x, y - w, z, x, y + w, z);
+    }
+    for (let i = 0; i < N; i++) {
+      const a = base + i * 2;
+      idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+    }
+  }
+  for (const tEnd of [0, 1]) {
+    const base = pos.length / 3;
+    const [xo, yo, zo] = ring(tEnd, 1);
+    const [xi, yi, zi] = ring(tEnd, -1);
+    pos.push(xo, yo - w, zo, xo, yo + w, zo, xi, yi - w, zi, xi, yi + w, zi);
+    idx.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
 function headGeo(): THREE.BufferGeometry {
   // KEPALA MANUSIA (bukan bola): tengkorak lonjong — lebih tinggi & lebih
   // dalam dari lebar, rahang menyempit ke dagu, dagu maju, wajah agak rata.
@@ -447,13 +499,11 @@ export function buildRider(): Rider {
   );
   const head = mk(headGeo());
 
-  // ---- KERAH SLAYER: band kain MELINGKAR di pangkal leher + lipatan silang
-  // (syal yang benar-benar dililit, bukan pita menempel satu titik).
+  // ---- KERAH SLAYER: kain BENAR-BENAR DILILIT di leher — dua lilitan
+  // helix berlapis yang menumpuk & menyilang (kaya orang memakai syal).
   // Anak neckMesh → mengikuti lekuk leher, swing superman & skala pup.
   const scarfCollar = (() => {
     const g = new THREE.Group();
-    // band utama: silinder kain sedikit melebar ke bawah (kain menyusup)
-    const bandGeo = new THREE.CylinderGeometry(0.063, 0.07, 0.078, 26, 1, true);
     const bandMat = new THREE.MeshStandardMaterial({
       color: 0xc42f3a,
       roughness: 0.82,
@@ -462,24 +512,29 @@ export function buildRider(): Rider {
       emissive: new THREE.Color(0x1c0604),
       emissiveIntensity: 0.35,
     });
-    const band = new THREE.Mesh(bandGeo, bandMat);
-    // lipatan silang kedua: torus tipis dimiringkan → kesan dililit dua kali
-    const wrapGeo = new THREE.TorusGeometry(0.0655, 0.0145, 12, 30);
-    const wrap = new THREE.Mesh(wrapGeo, bandMat);
-    wrap.rotation.set(Math.PI / 2, 0, 0.42);
-    wrap.position.y = 0.004;
-    // trim emas di bibir atas & bawah band (muncul saat mode sulaman journey)
-    const trimGeo = new THREE.TorusGeometry(0.0675, 0.0038, 8, 34);
+    // lilitan utama: 1,8 putaran menurun — kain melingkar rapat di leher
+    const coil1 = new THREE.Mesh(
+      helixRibbonGeo({ turns: 1.8, y0: 0.054, y1: 0.004, r0: 0.0665, r1: 0.0705, width: 0.058, thick: 0.013, start: 0.35, wobble: 0.0035 }),
+      bandMat,
+    );
+    // lilitan kedua fase beda: menyilang menumpuk → ujung kain tampak
+    // ditusukkan ke bawah lilitan pertama
+    const coil2 = new THREE.Mesh(
+      helixRibbonGeo({ turns: 1.15, y0: 0.058, y1: 0.018, r0: 0.0725, r1: 0.0685, width: 0.05, thick: 0.011, start: 2.7, wobble: 0.003 }),
+      bandMat,
+    );
+    // trim emas di bibir atas & bawah lilitan (mode sulaman journey)
+    const trimGeo = new THREE.TorusGeometry(0.074, 0.0036, 8, 36);
     const trimT = new THREE.Mesh(trimGeo, gold);
     const trimB = new THREE.Mesh(trimGeo, gold);
     trimT.rotation.x = Math.PI / 2;
     trimB.rotation.x = Math.PI / 2;
-    trimT.position.y = 0.039;
-    trimB.position.y = -0.039;
+    trimT.position.y = 0.05;
+    trimB.position.y = -0.026;
     trimT.visible = false;
     trimB.visible = false;
-    g.add(band, wrap, trimT, trimB);
-    g.position.y = 0.05;
+    g.add(coil1, coil2, trimT, trimB);
+    g.position.y = 0.046;
     g.visible = false;
     neckMesh.add(g);
     return { group: g, bandMat, trimT, trimB };
