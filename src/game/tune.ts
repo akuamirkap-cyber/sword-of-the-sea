@@ -591,7 +591,7 @@ export const CAM_PRESETS: FeelPreset[] = [
   },
   {
     name: 'Sekiro ✦',
-    desc: 'DEFAULT: bahu kanan — drag = orbit · scroll = zoom · auto lock-on kristal',
+    desc: 'DEFAULT: bahu kanan — drag = orbit · scroll = zoom · lock-on kristal (menapak)',
     values: { camStyle: 1, camDist: 1, camLag: 1.15, fov: 0.75, shake: 0.35 },
   },
   {

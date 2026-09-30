@@ -375,6 +375,12 @@ export class Game {
   private orbit = { yaw: 0, pitch: 0.14, zoom: 1, lastInput: -10 };
   private lockTarget: { x: number; y: number; z: number; collected: boolean } | null = null;
   private lockCooldown = 0;
+  // ---- kamera "drone pengikut mobil": heading MILIK KAMERA sendiri — dari
+  // arah luncur (velocity), BUKAN dari badan rider. Rider = bola: badannya
+  // boleh spin trick 1080°, layar tidak ikut muter.
+  private camHeading = 0;
+  private camHeadingInit = false;
+  private clearLift = 0; // clearance terrain yang di-haluskan (naik cepat, turun pelan)
   /** cincin reticle lock-on (billboard, depthTest off = selalu terlihat) */
   private lockRing = new THREE.Mesh(
     new THREE.RingGeometry(0.55, 0.72, 40),
@@ -736,7 +742,7 @@ export class Game {
     const names = ['KAMERA KLASIK', 'KAMERA SEKIRO ✦', 'SWORD OF THE SEA ✦'];
     const descs = [
       'samping-belakang kanan, FOV melebar saat ngebut',
-      'drag = orbit · scroll = zoom · auto lock-on kristal',
+      'drag = orbit · scroll = zoom · lock-on kristal (menapak)',
       'drone sinematik lebar yang menyapu vista',
     ];
     this.popup(names[style], descs[style], 'cyan');
@@ -1095,6 +1101,9 @@ export class Game {
     this.airTime = 0;
     this.spinAngle = 0;
     this.spinVel = 0;
+    this.camHeading = this.yaw;
+    this.camHeadingInit = true;
+    this.clearLift = 0;
     this.air.resetAngles();
     this.air.chain = 0;
     this.air.chainTimer = 0;
@@ -2901,8 +2910,27 @@ export class Game {
     const T = this.tune;
     const speed = Math.hypot(this.vel.x, this.vel.z);
     const sn = clamp(speed / 72, 0, 1);
-    const fx = Math.sin(this.rig.yaw);
-    const fz = Math.cos(this.rig.yaw);
+
+    // ===================== DRONE HEADING (kamera cerdas) =====================
+    // Rider diperlakukan seperti BOLA / mobil yang diikuti drone: arah kamera
+    // ditentukan dari ARAH LUNCUR bola (velocity), bukan dari arah badan rider.
+    // Spin/flip freestyle tidak merubah velocity → layar TIDAK ikut muter.
+    // Di darat responsif (ngikutin carving), di udara/trik extra tenang.
+    const tricking =
+      Math.abs(this.air.flipVel) > 2.5 || Math.abs(this.air.spinVel) > 2.5 || this.air.board.active;
+    let headTgt = this.yaw;
+    if (speed > 6) headTgt = Math.atan2(this.vel.x, this.vel.z);
+    if (!this.camHeadingInit) {
+      this.camHeading = headTgt;
+      this.camHeadingInit = true;
+    }
+    let dh = headTgt - this.camHeading;
+    while (dh > Math.PI) dh -= Math.PI * 2;
+    while (dh < -Math.PI) dh += Math.PI * 2;
+    const kHead = this.grounded ? (tricking ? 2.0 : 4.5) : 1.5;
+    this.camHeading += dh * (1 - Math.exp(-dt * kHead));
+    const fx = Math.sin(this.camHeading);
+    const fz = Math.cos(this.camHeading);
     const mode = clamp(Math.round(T.camStyle), 0, 2);
     // set oleh cabang 'playing' di bawah
     let swayScale = 1;
@@ -2961,7 +2989,7 @@ export class Game {
           // yaw diarahkan ke target (frame rider) & pitch ke 0.2 — khas Sekiro:
           // rider DAN target sama-sama masuk frame
           const lt = this.lockTarget;
-          let rel = Math.atan2(lt.x - px, lt.z - pz) - this.rig.yaw;
+          let rel = Math.atan2(lt.x - px, lt.z - pz) - this.camHeading;
           rel = Math.atan2(Math.sin(rel), Math.cos(rel));
           const yawTgt = clamp(rel * 0.6, -0.9, 0.9);
           o.yaw += (yawTgt - o.yaw) * (1 - Math.exp(-dt * 2.5));
@@ -2971,7 +2999,7 @@ export class Game {
           o.yaw += (0 - o.yaw) * (1 - Math.exp(-dt * 1.3));
           o.pitch += (0.14 - o.pitch) * (1 - Math.exp(-dt * 1.3));
         }
-        const az = this.rig.yaw + Math.PI + o.yaw;
+        const az = this.camHeading + Math.PI + o.yaw;
         const cosP = Math.cos(o.pitch);
         const dist = 5.4 * o.zoom * T.camDist + (!this.grounded ? 0.8 : 0);
         const shoulder = 0.85; // offset ke kanan → rider di kiri frame
@@ -3001,7 +3029,7 @@ export class Game {
         kLook = 2.6;
         swayScale = 0.9;
         const sweep = Math.sin(this.time * 0.11) * 0.75 + Math.sin(this.time * 0.037 + 1.3) * 0.45;
-        const cyaw = this.rig.yaw + Math.PI + sweep + lean * 0.25;
+        const cyaw = this.camHeading + Math.PI + sweep + lean * 0.15;
         const dist = (15 + 5 * sn + 5 * air) * T.camDist;
         const height = 2.4 + 0.8 * sn + 3.2 * air;
         this.t2.set(px + Math.sin(cyaw) * dist, py + height, pz + Math.cos(cyaw) * dist);
@@ -3020,6 +3048,9 @@ export class Game {
       // clearance minimal di atas terrain; sampel 3 titik garis kamera→rider
       // (30%, 55%, 80%): jika ada punggung bukit di atas garis pandang, kamera
       // DINAIKKAN need/f supaya garis bebas — bukan dipotong jaraknya.
+      // Lift di-haluskan: NAIK cepat (kamera tak pernah tembus bukit), TURUN
+      // pelan (landing setelah loncat tidak disertai jatuh vertikal mendadak).
+      const rawY = this.t2.y;
       const g0 = smoothHeight(this.t2.x, this.t2.z, 6) + clearance;
       if (this.t2.y < g0) this.t2.y = g0;
       for (const f of [0.3, 0.55, 0.8]) {
@@ -3029,6 +3060,10 @@ export class Game {
         const need = smoothHeight(lx, lz, 6) + clearance - ly;
         if (need > 0) this.t2.y += need / f;
       }
+      const lift = this.t2.y - rawY;
+      const kLift = lift > this.clearLift ? 12 : 1.6;
+      this.clearLift += (lift - this.clearLift) * (1 - Math.exp(-dt * kLift));
+      this.t2.y = rawY + this.clearLift;
 
       // ============================ lerp desired ============================
       this.camPos.lerp(this.t2, 1 - Math.exp(-dt * kPos * kMul));
@@ -3083,8 +3118,17 @@ export class Game {
    */
   private updateLockOn() {
     if (this.lockCooldown > 0) return;
-    const fx = Math.sin(this.rig.yaw);
-    const fz = Math.cos(this.rig.yaw);
+    // DRONE RULE: lock-on kamera hanya saat menapak & tidak trik. Saat loncat /
+    // freestyle kamera tetap netral menghadap arah luncur — tidak ada swing
+    // mendadak ke kristal yang bikin layar "muter / nyorot ga jelas".
+    const tricking =
+      Math.abs(this.air.flipVel) > 2.5 || Math.abs(this.air.spinVel) > 2.5 || this.air.board.active;
+    if (!this.grounded || tricking) {
+      this.lockTarget = null;
+      return;
+    }
+    const fx = Math.sin(this.camHeading);
+    const fz = Math.cos(this.camHeading);
     const cur = this.lockTarget;
     if (cur && !cur.collected) {
       const ddx = cur.x - this.pos.x;
