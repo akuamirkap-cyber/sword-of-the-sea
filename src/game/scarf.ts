@@ -139,6 +139,8 @@ export class Scarf {
   private acc = new THREE.Vector3();
   private before = new THREE.Vector3();
   private lat = new THREE.Vector3();
+  private wind = new THREE.Vector3();
+  private press = new THREE.Vector3();
   private baseColor = new THREE.Color();
   private tipColor = new THREE.Color();
 
@@ -234,7 +236,7 @@ export class Scarf {
     this.init = true;
   }
 
-  update(dt: number, anchor: THREE.Vector3, back: THREE.Vector3, speed: number, time: number, o: ScarfOpts) {
+  update(dt: number, anchor: THREE.Vector3, back: THREE.Vector3, speed: number, time: number, o: ScarfOpts, vel?: THREE.Vector3) {
     const seg = o.length / (N - 1);
     if (!this.init || anchor.distanceTo(this.p[0]) > 25) this.reset(anchor, back, seg);
     this.eu.uTime.value = time + this.phase;
@@ -244,8 +246,21 @@ export class Scarf {
 
     // ethereal silk is lighter: floats more, falls less
     const light = this.ethereal ? 0.55 : 1;
-    const damp = Math.pow(this.ethereal ? 0.915 : 0.9, dt * 60);
-    const flut = o.flutter * (0.35 + Math.min(speed, 90) * 0.015);
+    // redaman lebih tinggi = kain tenang, tidak bergetar per frame
+    const damp = Math.pow(this.ethereal ? 0.93 : 0.925, dt * 60);
+    // ---- AERODINAMIKA: angin sembunyi (apparent wind) = -kecepatan rider.
+    // Kain merasakan hembusan dari arah datangnya gerak — inilah yang membuat
+    // selendang mengekori dengan benar saat ngebut / mengerem / jatuh.
+    this.wind.set(
+      -((vel && vel.x) || back.x * speed),
+      -((vel && vel.y) || 0),
+      -((vel && vel.z) || back.z * speed),
+    );
+    // hembusan ambient lembut (gust dua lapis) supaya kain tetap hidup saat pelan
+    const gustK = Math.sin(time * 0.5 + this.phase) * 0.5 + Math.sin(time * 0.83 + this.phase * 2.1) * 0.5;
+    this.wind.x += back.x * (2.5 + 1.8 * gustK);
+    this.wind.z += back.z * (2.5 + 1.8 * gustK);
+    const flut = o.flutter * (0.25 + Math.min(speed, 90) * 0.011); // lebih lembut dari sebelumnya
     this.lat.set(back.z, 0, -back.x);
     const dt2 = dt * dt;
     const t = time + this.phase;
@@ -254,23 +269,41 @@ export class Scarf {
       const f = i / (N - 1);
       this.v.subVectors(this.p[i], this.prev[i]).multiplyScalar(damp);
       this.prev[i].copy(this.p[i]);
-      this.acc.set(0, -7 * light + Math.min(speed, 80) * 0.06, 0);
-      this.acc.addScaledVector(back, 4 + Math.min(speed, 80) * 0.05);
-      this.acc.addScaledVector(this.lat, Math.sin(t * 7.5 - i * 0.5) * flut * f * 18);
-      this.acc.y += Math.cos(t * 6.0 - i * 0.4) * flut * f * 14;
+      // gravitasi sungguhan (bukan angka ajaib)
+      this.acc.set(0, -9.8 * light, 0);
+      // gaya tekanan aerodinamis HANYA pada komponen angin yang tegak lurus
+      // segmen (model bendera) → kain berkibar natural tanpa gaya dorong manual
+      this.dir.subVectors(this.p[i], this.p[i - 1]);
+      let len = this.dir.length() || 1e-4;
+      this.dir.multiplyScalar(1 / len);
+      this.press.copy(this.wind).addScaledVector(this.dir, -this.wind.dot(this.dir));
+      const pl = this.press.length();
+      if (pl > 0.02) {
+        const k = (0.09 + o.width * 0.35) * Math.pow(Math.min(pl, 40), 1.5) * (0.35 + 0.65 * (1 - f * 0.5));
+        this.acc.addScaledVector(this.press, k / pl);
+      }
+      // turbulensi lembut: sinus tak sinkron + fase berjalan sepanjang pita
+      const fl = flut * f;
+      this.acc.addScaledVector(this.lat, Math.sin(t * 5.3 - i * 0.55 + Math.sin(t * 0.71) * 1.4) * fl * 9);
+      this.acc.y += Math.cos(t * 4.1 - i * 0.4 + Math.sin(t * 0.53)) * fl * 7;
       if (this.ethereal) this.acc.y += Math.sin(t * 1.7 - i * 0.2) * 3 * f; // gentle dreamy lift
       this.p[i].add(this.v).addScaledVector(this.acc, dt2);
     }
 
-    for (let i = 1; i < N; i++) {
-      this.before.copy(this.p[i]);
-      this.dir.subVectors(this.p[i], this.p[i - 1]);
-      const len = this.dir.length() || 1e-4;
-      this.p[i].copy(this.p[i - 1]).addScaledVector(this.dir, seg / len);
-      const gy = duneHeight(this.p[i].x, this.p[i].z) + 0.12;
-      if (this.p[i].y < gy) this.p[i].y = gy;
-      this.before.subVectors(this.p[i], this.before);
-      this.prev[i].add(this.before.multiplyScalar(0.85));
+    // 3 iterasi follow-the-leader → panjang benar-benar konstan walau ngebut
+    for (let iter = 0; iter < 3; iter++) {
+      for (let i = 1; i < N; i++) {
+        this.before.copy(this.p[i]);
+        this.dir.subVectors(this.p[i], this.p[i - 1]);
+        const clen = this.dir.length() || 1e-4;
+        this.p[i].copy(this.p[i - 1]).addScaledVector(this.dir, seg / clen);
+        if (iter === 0) {
+          const gy = duneHeight(this.p[i].x, this.p[i].z) + 0.12;
+          if (this.p[i].y < gy) this.p[i].y = gy;
+        }
+        this.before.subVectors(this.p[i], this.before);
+        this.prev[i].addScaledVector(this.before, iter === 0 ? 0.85 : 0.9);
+      }
     }
 
     this.writeMesh(t, o);

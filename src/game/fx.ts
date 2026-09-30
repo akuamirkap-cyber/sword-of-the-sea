@@ -377,6 +377,119 @@ export class TrailRibbon {
 }
 
 // ---------------------------------------------------------------------------
+// WIND STREAKS — aliran angin yang terasa: garis-garis halus lewat di sekitar
+// rider searah hembusan (kebalikan kecepatan), makin kencang makin terlihat.
+// Additive lembut, tidak pernah menua jadi "noise" — meluruh saat pelan.
+// ---------------------------------------------------------------------------
+export class WindStreaks {
+  lines: THREE.LineSegments;
+  private n: number;
+  private pts: THREE.Vector3[] = [];
+  private posA: THREE.BufferAttribute;
+  private colA: THREE.BufferAttribute;
+  private seeds: number[] = [];
+  private flow = new THREE.Vector3(0, 0, 1);
+  private tmp = new THREE.Vector3();
+  private box = 44;
+  private intensity = 0;
+
+  constructor(count = 46) {
+    this.n = count;
+    const pos = new Float32Array(count * 2 * 3);
+    const col = new Float32Array(count * 2 * 3);
+    for (let i = 0; i < count; i++) {
+      this.pts.push(new THREE.Vector3());
+      this.seeds.push(Math.random() * 100);
+      this.respawn(i, new THREE.Vector3());
+    }
+    const geo = new THREE.BufferGeometry();
+    this.posA = new THREE.BufferAttribute(pos, 3);
+    this.colA = new THREE.BufferAttribute(col, 3);
+    this.posA.setUsage(THREE.DynamicDrawUsage);
+    this.colA.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('position', this.posA);
+    geo.setAttribute('color', this.colA);
+    geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e6);
+    const mat = new THREE.LineBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.85,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      fog: false,
+    });
+    this.lines = new THREE.LineSegments(geo, mat);
+    this.lines.frustumCulled = false;
+    this.lines.renderOrder = 6;
+  }
+
+  private respawn(i: number, center: THREE.Vector3) {
+    const s = this.seeds[i];
+    const r = 6 + (s % 1) * (this.box * 0.5);
+    const a = s * 2.399;
+    this.pts[i].set(
+      center.x + Math.cos(a) * r,
+      center.y + (Math.sin(s * 7.3) * 0.5 + 0.15) * this.box * 0.42,
+      center.z + Math.sin(a) * r,
+    );
+  }
+
+  /**
+   * @param intensity 0..1 — dari kecepatan rider; 0 = memudar penuh (tak tampak)
+   */
+  update(dt: number, center: THREE.Vector3, vel: THREE.Vector3, intensity: number) {
+    this.intensity += (Math.max(0, Math.min(1, intensity)) - this.intensity) * (1 - Math.exp(-dt * 3));
+    const spd = vel.length();
+    if (spd > 0.4) this.flow.copy(vel).multiplyScalar(1 / spd);
+    else this.flow.lerp(this.tmp.set(0, 0, 1), 1 - Math.exp(-dt * 2)).normalize();
+    this.lines.visible = this.intensity > 0.02;
+    if (!this.lines.visible) return;
+
+    const pos = this.posA.array as Float32Array;
+    const col = this.colA.array as Float32Array;
+    // panjang goresan & kecepatan aliran mengikuti angin sembunyi
+    const len = 0.9 + Math.min(spd, 90) * 0.035;
+    const adv = (5 + Math.min(spd, 90) * 0.75) * dt;
+    for (let i = 0; i < this.n; i++) {
+      const p = this.pts[i];
+      // mengalir melawan arah gerak (angin relatif lewat dari depan)
+      p.addScaledVector(this.flow, -adv);
+      // drift lateral lembut — aliran tidak kaku
+      const s = this.seeds[i];
+      p.x += Math.sin(s + p.z * 0.05) * dt * 0.7;
+      p.y += Math.cos(s * 1.3 + p.z * 0.04) * dt * 0.5;
+      // bila tertinggal di luar kotak di sekitar rider → daur ulang ke depan
+      this.tmp.subVectors(p, center);
+      if (Math.abs(this.tmp.x) > this.box || Math.abs(this.tmp.z) > this.box || Math.abs(this.tmp.y) > this.box * 0.6) {
+        this.respawn(i, center);
+        p.addScaledVector(this.flow, 8 + Math.random() * 14); // muncul dari depan
+        continue;
+      }
+      const k = i * 6;
+      pos[k] = p.x;
+      pos[k + 1] = p.y;
+      pos[k + 2] = p.z;
+      const ex = p.x + this.flow.x * len;
+      const ey = p.y + this.flow.y * len;
+      const ez = p.z + this.flow.z * len;
+      pos[k + 3] = ex;
+      pos[k + 4] = ey;
+      pos[k + 5] = ez;
+      // keceruan: pangkal lebih terang, ujung memudar (pseudo-alpha via warna)
+      const b = this.intensity * (0.1 + 0.16 * (0.5 + 0.5 * Math.sin(s * 3.1 + i)));
+      col[k] = b;
+      col[k + 1] = b * 1.04;
+      col[k + 2] = b * 1.12;
+      col[k + 3] = b * 0.25;
+      col[k + 4] = b * 0.27;
+      col[k + 5] = b * 0.32;
+    }
+    this.posA.needsUpdate = true;
+    this.colA.needsUpdate = true;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Ambient floating motes (world wrapped, zero CPU) --------------------------
 // ---------------------------------------------------------------------------
 export class Motes {

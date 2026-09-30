@@ -486,7 +486,8 @@ export class Monoliths {
     this.arches.frustumCulled = false;
 
     this.group.add(this.stones);
-    this.group.add(this.beacons);
+    // CATATAN: "permata melayang di atas reruntuhan" (beacons) sengaja DIHAPUS
+    // dari scene — permata sekarang hanya yang bisa diambil (EnergyCrystals).
     this.group.add(this.boulders);
     this.group.add(this.statues);
     this.group.add(this.statueEyes);
@@ -701,6 +702,7 @@ export class Monoliths {
   update(px: number, pz: number, fx: number, fz: number, time: number) {
     void fx;
     void fz;
+    void time;
     // 1. Update ruins - spread far apart
     for (let i = 0; i < this.countRuin; i++) {
       const it = this.items[i];
@@ -709,15 +711,7 @@ export class Monoliths {
       if (Math.hypot(dx, dz) > 600 || dz < -60) {
         this.placeRuin(i, px, pz, 380 + Math.random() * 450);
       }
-      const y = it.y + it.h + 2.2 + Math.sin(time * 0.9 + it.seed) * 0.8;
-      this.eu.set(time * 0.25 + it.seed, time * 0.4 + it.seed, 0);
-      this.q.setFromEuler(this.eu);
-      this.v.set(it.x, y, it.z);
-      this.sc.set(0.55, 2.2, 0.55);
-      this.m4.compose(this.v, this.q, this.sc);
-      this.beacons.setMatrixAt(i, this.m4);
     }
-    this.beacons.instanceMatrix.needsUpdate = true;
 
     // 2. Update boulders
     for (let i = 0; i < this.countRock; i++) {
@@ -984,10 +978,31 @@ export class SpeedPads {
 // ---------------------------------------------------------------------------
 // Energy Crystals (Kristal Surya / Inti Energi) - Collectible mountain trail rewards
 // ---------------------------------------------------------------------------
+/** gradien lembut untuk pilar sinar permata: terang di dasar, memudar ke atas */
+function makeSoftBeamTexture(): THREE.Texture {
+  const c = document.createElement('canvas');
+  c.width = 4;
+  c.height = 128;
+  const ctx = c.getContext('2d')!;
+  const g = ctx.createLinearGradient(0, 0, 0, 128);
+  // canvas baris atas (uv v=1, puncak pilar) transparan → dasar terang
+  g.addColorStop(0, 'rgba(255,255,255,0)');
+  g.addColorStop(0.45, 'rgba(255,255,255,0.18)');
+  g.addColorStop(0.85, 'rgba(255,255,255,0.7)');
+  g.addColorStop(1, 'rgba(255,255,255,0.95)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 4, 128);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}
+
 export class EnergyCrystals {
   group = new THREE.Group();
   private mesh: THREE.InstancedMesh;
   private mat: THREE.MeshStandardMaterial;
+  private beams: THREE.InstancedMesh;
   private count = 42;
   private m4 = new THREE.Matrix4();
   private q = new THREE.Quaternion();
@@ -995,6 +1010,8 @@ export class EnergyCrystals {
   private sc = new THREE.Vector3();
   private zero = new THREE.Matrix4().makeScale(0, 0, 0);
   private items: { x: number; y: number; z: number; collected: boolean; seed: number }[] = [];
+  /** daftar obstacle (relic/patung/batu) yang harus dihindari permata */
+  private avoid: { x: number; z: number; r: number }[] = [];
 
   constructor() {
     const geo = new THREE.OctahedronGeometry(0.55, 0);
@@ -1009,14 +1026,42 @@ export class EnergyCrystals {
     this.mesh.frustumCulled = false;
     this.group.add(this.mesh);
 
+    // ---- sinar lembut: pilar cahaya tipis dari setiap permata yang BISA
+    // DIAMBIL — terlihat dari jauh, menghilang saat permata terkoleksi.
+    {
+      const bGeo = new THREE.CylinderGeometry(0.3, 0.48, 24, 10, 1, true);
+      bGeo.translate(0, 12, 0); // origin di dasar pilar
+      const tex = makeSoftBeamTexture();
+      const bMat = new THREE.MeshBasicMaterial({
+        map: tex,
+        color: 0xffd685, // emas hangat menyala seirama permata
+        transparent: true,
+        opacity: 0.34,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+        fog: false,
+      });
+      this.beams = new THREE.InstancedMesh(bGeo, bMat, this.count);
+      this.beams.frustumCulled = false;
+      this.beams.renderOrder = 4;
+      this.group.add(this.beams);
+    }
+
     for (let i = 0; i < this.count; i++) {
       this.items.push({ x: 0, y: 0, z: 0, collected: false, seed: Math.random() * 100 });
       this.place(i, 0, (i / this.count) * 1200 + 40);
     }
   }
 
+  /** daftar Hindari: permata tidak pernah muncul di atas / menempel relic */
+  setAvoid(list: { x: number; z: number; r: number }[]) {
+    this.avoid = list;
+  }
+
   setGlow(v: number) {
     this.mat.emissiveIntensity = 2.2 * v;
+    (this.beams.material as THREE.MeshBasicMaterial).opacity = 0.34 * Math.min(1.4, v);
   }
 
   /** kandidat target lock-on kamera Sekiro */
@@ -1028,7 +1073,21 @@ export class EnergyCrystals {
     const z = pz + dist;
     // form gentle curving arcs along the trail or over launch mounds
     const spread = Math.sin(i * 0.4) * 28;
-    const x = pathX(z) + spread;
+    let x = pathX(z) + spread;
+    // jangan menempel pada relic / patung / batu: geser sampai bebas
+    if (this.avoid.length) {
+      for (let tries = 0; tries < 8; tries++) {
+        let hit = false;
+        for (const a of this.avoid) {
+          if (Math.hypot(x - a.x, z - a.z) < a.r + 7) {
+            hit = true;
+            break;
+          }
+        }
+        if (!hit) break;
+        x = pathX(z) + (Math.random() - 0.5) * 110;
+      }
+    }
     const y = duneHeight(x, z) + 1.6 + Math.sin(i * 0.8) * 1.2;
     const it = this.items[i];
     it.x = x;
@@ -1053,6 +1112,7 @@ export class EnergyCrystals {
       }
       if (it.collected) {
         this.mesh.setMatrixAt(i, this.zero);
+        this.beams.setMatrixAt(i, this.zero);
         continue;
       }
       const bob = Math.sin(time * 3 + it.seed) * 0.25;
@@ -1061,8 +1121,16 @@ export class EnergyCrystals {
       this.sc.set(1, 1.35, 1);
       this.m4.compose(this.v, this.q, this.sc);
       this.mesh.setMatrixAt(i, this.m4);
+      // sinar lembut: mengikuti permata, denyut tipis, tidak ikut berputar
+      const pulse = 0.9 + Math.sin(time * 2.4 + it.seed) * 0.18;
+      this.v.set(it.x, it.y - 1.1, it.z);
+      this.q.identity();
+      this.sc.set(pulse, 1, pulse);
+      this.m4.compose(this.v, this.q, this.sc);
+      this.beams.setMatrixAt(i, this.m4);
     }
     this.mesh.instanceMatrix.needsUpdate = true;
+    this.beams.instanceMatrix.needsUpdate = true;
   }
 
   /** checks collection by player position; returns count of shards collected */

@@ -53,6 +53,9 @@ export const CRYSTAL_SKINS: CrystalSkin[] = [
   { name: 'Emerald', tint: '#98f0c4', deep: '#127f56', rim: '#dcfff0', inner: '#a8ffd6', emissive: '#27d690', prism: 1, spark: 1.1, depth: 0.52, ior: 1.58 },
   { name: 'Citrine', tint: '#ffdc8f', deep: '#b06a1c', rim: '#fff4d6', inner: '#ffe6ad', emissive: '#ffae3a', prism: 1, spark: 1.1, depth: 0.45, ior: 1.55 },
   { name: 'Midnight', tint: '#434a86', deep: '#0c0e2c', rim: '#b3c0ff', inner: '#7f8cff', emissive: '#3a44c8', prism: 1.4, spark: 1.4, depth: 0.72, ior: 1.7 },
+  // Slugpup: putih pucat khas Rain World — kaca mutiara lembut, ekor panjang
+  // menyusul otomatis (lihat Game.updateScarf)
+  { name: 'Slugpup ✦', tint: '#f2f4f6', deep: '#a9b6c6', rim: '#ffffff', inner: '#e8eff8', emissive: '#c8d4e2', prism: 0.5, spark: 0.55, depth: 0.3, ior: 1.45 },
 ];
 
 export const ACCENT_METALS = [

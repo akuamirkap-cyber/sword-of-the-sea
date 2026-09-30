@@ -35,7 +35,7 @@ import {
 import { ChasmMarkers } from './world';
 import { AXIS_Z, UP } from './math';
 import { TerrainField } from './terrain';
-import { Motes, Particles, Ripples, TrailRibbon, makeGlowTexture, makeSoftDiscTexture } from './fx';
+import { Motes, Particles, Ripples, TrailRibbon, WindStreaks, makeGlowTexture, makeSoftDiscTexture } from './fx';
 import { buildRider } from './model';
 import { BiomeScenery, CloudLayer, Monoliths, SkyDome, SpeedPads, EnergyCrystals, getMountainSector } from './world';
 import { AudioEngine } from './audio';
@@ -291,6 +291,7 @@ export class Game {
   private glow = new Particles(900, true);
   private ripples = new Ripples(20);
   private motes = new Motes(280, 95);
+  private windStreaks = new WindStreaks(46);
   private trailGlow = new TrailRibbon(180, 0.22, 0xffd08a, 0.85, true, 0.25);
   private trailWake = new TrailRibbon(140, 0.32, 0x8a7058, 0.75, false, 0.18);
   private trailScarf = new TrailRibbon(100, 0.10, 0x9ad9ff, 0.85, true, 0.2);
@@ -299,6 +300,8 @@ export class Game {
   private trailSword = new TrailRibbon(190, 0.22, 0xf6faff, 0.6, false, 0.2);
   private scarfA = new Scarf(0);
   private scarfB = new Scarf(1.7);
+  /** ekor panjang slugpup — tali verlet dari pangkal punggung (skin Slugpup) */
+  private scarfTail = new Scarf(3.1);
   private whales = new WhalePod(6);
   private fish = new FishSchool(6);
   // ---- endless descent
@@ -602,7 +605,10 @@ export class Game {
     this.scene.add(this.glow.points);
     this.scene.add(this.ripples.group);
     this.scene.add(this.motes.points);
+    this.scene.add(this.windStreaks.lines);
     this.scene.add(this.trailGlow.mesh);
+    // permata tidak pernah menempel pada relic / patung / batu
+    this.energyCrystals.setAvoid(this.monoliths.items);
     this.scene.add(this.trailWake.mesh);
     this.scene.add(this.trailScarf.mesh);
     this.scene.add(this.trailAir.mesh);
@@ -612,6 +618,11 @@ export class Game {
     this.scene.add(this.lockRing);
     this.scene.add(this.scarfA.mesh);
     this.scene.add(this.scarfB.mesh);
+    this.scene.add(this.scarfTail.mesh);
+    // ekor slugpup: kain putih pucat, bukan selendang warna
+    this.scarfTail.setColor('#e9eef4');
+    this.scarfTail.setSkin(false, 0);
+    this.scarfTail.setVisible(false);
     this.scene.add(this.whales.group);
     this.scene.add(this.fish.mesh);
     this.scene.add(this.river.group);
@@ -1607,6 +1618,8 @@ export class Game {
     this.ripples.update(dt);
     this.clouds.update(dt);
     this.motes.update(dt, this.camera.position);
+    // aliran angin terasa: goresan halus lewat searah hembusan relatif
+    this.windStreaks.update(dt, this.pos, this.vel, clamp((Math.hypot(this.vel.x, this.vel.z) - 16) / 68, 0, 1) * this.tune.particles);
 
     const sp = Math.hypot(this.vel.x, this.vel.z);
     const fx = Math.sin(this.yaw);
@@ -1847,7 +1860,7 @@ export class Game {
 
     const off = T.scarfTwin ? 0.1 : 0;
     this.t1.copy(this.scarfAnchor).addScaledVector(this.scarfLat, off);
-    this.scarfA.update(dt, this.t1, this.scarfBack, speed, this.time, opts);
+    this.scarfA.update(dt, this.t1, this.scarfBack, speed, this.time, opts, this.vel);
     this.scarfB.setVisible(T.scarfTwin);
     if (T.scarfTwin) {
       this.t1.copy(this.scarfAnchor).addScaledVector(this.scarfLat, -off);
@@ -1855,7 +1868,24 @@ export class Game {
         ...opts,
         length: opts.length * 0.82,
         width: opts.width * 0.9,
-      });
+      }, this.vel);
+    }
+
+    // ---- ekor panjang SLUGPUP: tali verlet kedua dari pangkal punggung.
+    // Aktif otomatis saat skin karakter = Slugpup (Rain World pup putih).
+    {
+      const idx = ((Math.round(T.crystalSkin) % CRYSTAL_SKINS.length) + CRYSTAL_SKINS.length) % CRYSTAL_SKINS.length;
+      const pup = !T.crystalCustom && /slugpup/i.test(CRYSTAL_SKINS[idx].name);
+      this.rider.setPup(pup);
+      this.scarfTail.setVisible(pup);
+      if (pup) {
+        this.rider.tailBone.getWorldPosition(this.t1);
+        this.scarfTail.update(dt, this.t1, this.scarfBack, speed, this.time, {
+          length: 2 + T.scarfLength * 0.24, // ekor panjang, ikut slider slayer
+          width: 0.2 + T.scarfWidth * 0.22,
+          flutter: 0.6,
+        }, this.vel);
+      }
     }
 
     // ---- ethereal: motes of light drift off the veil

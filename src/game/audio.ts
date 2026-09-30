@@ -88,19 +88,37 @@ export class AudioEngine {
       for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
       this.noiseBuf = buf;
 
-      // wind (low rumble)
+      // wind (low rumble) — LEBIUT LEMBUT: cutoff rendah + gain kecil,
+      // dimodulasi LFO dua lapis (gust) supaya terasa "mengalir", bukan dengung statis
       const wind = ctx.createBufferSource();
       wind.buffer = buf;
       wind.loop = true;
       this.windFilter = ctx.createBiquadFilter();
       this.windFilter.type = 'lowpass';
-      this.windFilter.frequency.value = 500;
+      this.windFilter.frequency.value = 320;
       this.windGain = ctx.createGain();
       this.windGain.gain.value = 0;
       wind.connect(this.windFilter);
       this.windFilter.connect(this.windGain);
       this.windGain.connect(this.master);
       wind.start();
+      // gust: hembusan pelan naik-turun (0.07 Hz + 0.113 Hz — tidak sinkron)
+      const gust1 = ctx.createOscillator();
+      gust1.type = 'sine';
+      gust1.frequency.value = 0.07;
+      const gust2 = ctx.createOscillator();
+      gust2.type = 'sine';
+      gust2.frequency.value = 0.113;
+      const g1 = ctx.createGain();
+      g1.gain.value = 0.011;
+      const g2 = ctx.createGain();
+      g2.gain.value = 0.006;
+      gust1.connect(g1);
+      gust2.connect(g2);
+      g1.connect(this.windGain.gain);
+      g2.connect(this.windGain.gain);
+      gust1.start();
+      gust2.start();
 
       // sand hiss (carve)
       const hiss = ctx.createBufferSource();
@@ -227,11 +245,12 @@ export class AudioEngine {
   setSpeed(s: number, carve: number, boosting: boolean) {
     if (!this.ready) return;
     const t = this.now();
-    this.windGain.gain.setTargetAtTime(0.035 + s * 0.24, t, 0.15);
-    this.windFilter.frequency.setTargetAtTime(320 + s * 1500, t, 0.2);
-    this.hissGain.gain.setTargetAtTime(Math.min(0.2, carve * 0.2 + s * 0.03), t, 0.08);
-    this.hissFilter.frequency.setTargetAtTime(1100 + carve * 1800 + s * 700, t, 0.12);
-    this.boostGain.gain.setTargetAtTime(boosting ? 0.16 : 0, t, 0.12);
+    // angin lembut: gain & cutoff diturunkan — sayup pelan, bukan deru
+    this.windGain.gain.setTargetAtTime(0.02 + s * 0.15, t, 0.2);
+    this.windFilter.frequency.setTargetAtTime(230 + s * 900, t, 0.25);
+    this.hissGain.gain.setTargetAtTime(Math.min(0.15, carve * 0.15 + s * 0.024), t, 0.08);
+    this.hissFilter.frequency.setTargetAtTime(1000 + carve * 1600 + s * 600, t, 0.12);
+    this.boostGain.gain.setTargetAtTime(boosting ? 0.13 : 0, t, 0.12);
     this.boostOsc.frequency.setTargetAtTime(60 + s * 90, t, 0.2);
   }
 
