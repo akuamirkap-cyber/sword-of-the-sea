@@ -294,7 +294,7 @@ export function SettingsPanel({
               </span>
             </div>
             <div className="text-[7.5px] text-sand-200/70 truncate">
-              Langit Twilight · Cahaya Netral · Bloom Data 1 (Silau 150%)
+              Langit Twilight · Cahaya Netral · Bloom Data 1 (Silau 65%, Bloom 126%)
             </div>
           </div>
           <button

@@ -484,7 +484,7 @@ export function StartScreen({
                   </span>
                 </div>
                 <div className="mt-1 text-[8.5px] leading-relaxed text-sand-200/80">
-                  Langit Twilight (Ungu Senja) · Pencahayaan Netral · Bloom Data 1 (Tinggi: Silau 150%, Pendar Besar & Paus Kristal Bersinar)
+                  Langit Twilight (Ungu Senja) · Pencahayaan Netral · Bloom Data 1 (Silau 65%, Bloom 126%, Exposure 160%)
                 </div>
               </div>
               <button
@@ -582,7 +582,7 @@ export function StartScreen({
                   {p.name === 'Data 1 (Tinggi)' ? '⚡ Data 1 (Tinggi)' : p.name === 'Data 1' ? '✨ Data 1' : p.name}
                 </div>
                 <div className="mt-1 text-[6.5px] leading-tight uppercase tracking-[0.06em] text-sand-200/55">
-                  {p.name === 'Data 1 (Tinggi)' ? '150% Silau Intens' : p.desc}
+                  {p.name.startsWith('Data 1') ? 'Silau 65% · Bloom 126%' : p.desc}
                 </div>
               </button>
             ))}
