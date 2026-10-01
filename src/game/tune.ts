@@ -49,13 +49,36 @@ export interface Tune {
   floaty: number;
   spin: number;
   turn: number;
+  airTurn: number; // multiplier belok saat di udara
   speed: number;
 
   // ---- camera
+  camStyle: number; // 0 = Klasik, 1 = Sekiro (third-person + lock-on), 2 = Sword of the Sea (sinematik), 3 = Bodycam
+  worldMode: number; // 0 = Petualangan (auto blend biome), 1 = Gurun Pasir, 2 = Ngarai Merah, 3 = Reruntuhan Kuil
   camDist: number;
   camLag: number;
   fov: number;
   shake: number;
+
+  // ---- penyetelan PER MODE kamera (jarak = pengali · sudut dalam DERAJAT).
+  // Yaw: 0 = tepat di belakang rider, positif = makin ke kanan (serong).
+  // Pitch: positif = kamera makin tinggi / menunduk, negatif = rendah / menengadah.
+  cam0Dist: number; // Klasik — jarak
+  cam0Pitch: number; // Klasik — sudut vertikal
+  cam0Yaw: number; // Klasik — sudut horizontal (default 40° = samping-belakang kanan asli)
+  cam0Height: number; // Klasik — offset tinggi letak kamera (meter)
+  cam1Dist: number; // Sekiro — jarak dasar
+  cam1Pitch: number; // Sekiro — sudut vertikal dasar (default 2° ≈ level → third-person)
+  cam1Yaw: number; // Sekiro — sudut horizontal dasar
+  cam1Height: number; // Sekiro — offset tinggi letak kamera (meter)
+  cam2Dist: number; // Sword of the Sea — jarak
+  cam2Pitch: number; // Sword of the Sea — sudut vertikal
+  cam2Yaw: number; // Sword of the Sea — sudut horizontal
+  cam2Height: number; // Sword of the Sea — offset tinggi letak kamera (meter)
+  cam3Dist: number; // Bodycam — jarak (mengalikan offset 0.85 m dari punggung)
+  cam3Pitch: number; // Bodycam — sudut vertikal (positif = menunduk ke lintasan)
+  cam3Yaw: number; // Bodycam — sudut horizontal (toleh kiri/kanan)
+  cam3Height: number; // Bodycam — offset tinggi letak kamera (meter)
 
   // ---- fx
   particles: number;
@@ -77,15 +100,24 @@ export interface Tune {
   scarfSkin: number; // 0 = cloth, 1 = ethereal
   scarfEthereal: number; // index into ETHEREAL_SKINS
 
+  // ---- SLAYER: sulaman emas ala Journey (diamond & chevron berdenyut)
+  scarfEmbroidery: boolean; // sulaman emas pada slayer skin kain
+  scarfEmbroideryGlow: number; // kekuatan pendar sulaman (ikut energi flow)
+
   // ---- CHARACTER
   crystalSkin: number; // index into CRYSTAL_SKINS
   crystalCustom: boolean;
   crystalC: string;
   accentMetal: number; // index into ACCENT_METALS
+  swordSkin: number; // index into SWORD_SKINS (0 = Silver Surfer krom, default)
+  boardType: number; // PAPAN: 0 = papan surf Silver Surfer (default) · 1 = pedang skate
   bodyHeight: number; // 1 = normal, ~0.78 = short, ~0.5 = chibi
   headSize: number;
   swordSize: number;
   swordGlow: number; // pencahayaan & pendar pedang skate (0 = redup, 1 = pendar lembut normal)
+
+  // ---- AURORA (tirai cahaya polar di langit)
+  aurora: number; // 0 = mati · 1 = normal · 2 = super gemilang
 
   // ---- SKY WHALES
   whales: number; // count 0..6
@@ -169,7 +201,7 @@ export interface Tune {
 export const DEFAULT_TUNE: Tune = {
   palette: 5, // Twilight (Langit Twilight)
   cycle: false,
-  haze: 0.42,
+  haze: 0.3,
 
   sunAz: 0,
   sunEl: 0,
@@ -193,7 +225,7 @@ export const DEFAULT_TUNE: Tune = {
   tint: 0,
   lift: 0,
   gain: 1,
-  vignette: 0.18,
+  vignette: 0, // tanpa vignette gelap — layar bersih
   grain: 0.03,
 
   // default = the "Silk" feel, so it glides beautifully out of the box
@@ -208,12 +240,35 @@ export const DEFAULT_TUNE: Tune = {
   floaty: 1,
   spin: 1,
   turn: 1,
+  airTurn: 0.72,
   speed: 1,
 
-  camDist: 1.02,
-  camLag: 0.82,
-  fov: 0.95,
-  shake: 0.55,
+  camStyle: 3, // DEFAULT = Bodycam — tekan 1/2/3/4 untuk ganti
+  worldMode: 0, // DEFAULT = Petualangan (biome berganti mulus sepanjang perjalanan)
+  camDist: 1,
+  camLag: 1.15,
+  fov: 0.75,
+  shake: 0.35,
+
+  // default per mode: Klasik & SotS ≈ framing asli · Sekiro 2° = third-person
+  // level (bukan top-down) · Bodycam default ×2.0 · 30° (menunduk ke lintasan,
+  // bisa diatur sampai 90° = top-down penuh)
+  cam0Dist: 1,
+  cam0Pitch: 17,
+  cam0Yaw: 40,
+  cam0Height: 0,
+  cam1Dist: 1,
+  cam1Pitch: 2,
+  cam1Yaw: 0,
+  cam1Height: 0,
+  cam2Dist: 1,
+  cam2Pitch: 9,
+  cam2Yaw: 0,
+  cam2Height: 0,
+  cam3Dist: 2,
+  cam3Pitch: 15,
+  cam3Yaw: 0,
+  cam3Height: 0,
 
   particles: 1,
   trails: 1,
@@ -228,20 +283,26 @@ export const DEFAULT_TUNE: Tune = {
   scarfWidth: 0.16,
   scarfFlutter: 0.8,
   scarfColor: 0,
-  scarfTwin: true,
+  scarfTwin: false, // DEFAULT = satu ujung (twin tail bisa diaktifkan di Settings)
   scarfGlow: false,
-  scarfSkin: 1,
+  scarfSkin: 0, // DEFAULT: kain (agar sulaman emas terlihat)
   scarfEthereal: 0,
+
+  scarfEmbroidery: true, // DEFAULT: slayer memakai sulaman emas ala Journey
+  scarfEmbroideryGlow: 1,
 
   crystalSkin: 2, // Indigo default
   crystalCustom: false,
   crystalC: '#8c80ff',
   accentMetal: 0,
-  bodyHeight: 0.5, // Mode Cebol (chibi kepala besar) aktif secara default
-  headSize: 1.7,
+  swordSkin: 0, // DEFAULT = Silver Surfer (krom reflektif)
+  boardType: 0, // DEFAULT = papan surf krom ikonik Silver Surfer
+  bodyHeight: 1, // proporsi dewasa ala Silver Surfer (chibi masih ada di preset)
+  headSize: 1,
   swordSize: 0.68,
   swordGlow: 0.18, // pencahayaan pedang teredam 70% (sejuk & proporsional)
 
+  aurora: 1, // aktif normal — warna otomatis mengikuti palet langit
   whales: 3,
   whaleSize: 1.6,
   whaleHeight: 1,
@@ -272,12 +333,13 @@ export const DEFAULT_TUNE: Tune = {
   waterCurrent: 1,
 
   // clear distance visibility: no blinding white haze
-  fogStart: 150,
-  fogHeight: 0.06,
-  fogLayer: 22,
-  fogScatter: 0.25,
-  fogMax: 0.85,
-  fogSky: 0.1,
+  // PANORAMA: kabut tipis — pemandangan jauh & pegunungan siluet terlihat jelas
+  fogStart: 340,
+  fogHeight: 0.04,
+  fogLayer: 30,
+  fogScatter: 0.22,
+  fogMax: 0.5,
+  fogSky: 0.06,
   fogCustom: false,
 
   jumpPower: 1,
@@ -285,7 +347,7 @@ export const DEFAULT_TUNE: Tune = {
   flipSpeed: 1,
   landAssist: 0.6,
   landWindow: 1,
-  airJumps: 2,
+  airJumps: 0, // double jump dinonaktifkan dulu (bisa diaktifkan lagi di tab Udara & Trik)
   airJumpPower: 1,
   perfectBoost: 1,
   slowmo: 0.5,
@@ -317,9 +379,14 @@ export const DEFAULT_TUNE: Tune = {
 /** Fog presets. */
 export const FOG_PRESETS: FeelPreset[] = [
   {
-    name: 'Jernih (Default)',
-    desc: 'paling jernih, jarak pandang luas & bebas silau',
-    values: { haze: 0.42, fogStart: 150, fogHeight: 0.06, fogLayer: 22, fogScatter: 0.25, fogMax: 0.85, fogSky: 0.1 },
+    name: 'Panorama ✦',
+    desc: 'DEFAULT: kabut tipis — pegunungan jauh & vista terbuka jernih',
+    values: { haze: 0.3, fogStart: 340, fogHeight: 0.04, fogLayer: 30, fogScatter: 0.22, fogMax: 0.5, fogSky: 0.06 },
+  },
+  {
+    name: 'Super Jernih',
+    desc: 'udara bening total — siluet gunung setajam mungkin',
+    values: { haze: 0.18, fogStart: 520, fogHeight: 0.02, fogLayer: 36, fogScatter: 0.15, fogMax: 0.3, fogSky: 0.03 },
   },
   {
     name: 'Ekstra Jernih',
@@ -550,7 +617,7 @@ export const MASTER_PRESETS: MasterPreset[] = [
       tint: 0,
       lift: 0,
       gain: 1,
-      vignette: 0.18,
+      vignette: 0,
       grain: 0.03,
       customColors: false,
       // Bloom & Cahaya Teredam 70%
@@ -577,6 +644,65 @@ export interface FeelPreset {
   desc: string;
   values: Partial<Tune>;
 }
+
+/** Camera mode presets — sistem "desired → smoothed" (tekan 1 / 2 / 3 / 4 saat main).
+ *  Preset TIDAK menimpa camXPitch/Yaw/Dist — penyetelan per mode milik user tetap. */
+export const CAM_PRESETS: FeelPreset[] = [
+  {
+    name: 'Klasik',
+    desc: 'samping-belakang kanan; makin ngebut makin mundur & FOV melebar',
+    values: { camStyle: 0, camDist: 1, camLag: 1, fov: 0.95, shake: 0.5 },
+  },
+  {
+    name: 'Sekiro ✦',
+    desc: 'DEFAULT: third-person di bahu — drag = orbit · scroll = zoom · lock-on kristal',
+    values: { camStyle: 1, camDist: 1, camLag: 1.15, fov: 0.75, shake: 0.35 },
+  },
+  {
+    name: 'Sword of the Sea',
+    desc: 'drone sinematik rendah & lebar yang menyapu vista, dutch angle',
+    values: { camStyle: 2, camDist: 1, camLag: 0.85, fov: 1.0, shake: 0.3 },
+  },
+  {
+    name: 'Bodycam v1 ●',
+    desc: 'DEFAULT: head-cam — di kepala, 15° menunduk, lensa super lebar, handheld kencang',
+    values: { camStyle: 3, camDist: 1, camLag: 1.6, fov: 0.85, shake: 0.65 },
+  },
+];
+
+/**
+ * Skin pedang-skate. 0 = Silver Surfer: krom murni reflektif seperti papan
+ * si Silver Surfer (default). 1 = Baja Asli: pedang biru-baja dengan gagang
+ * emas seperti release pertama.
+ */
+export const SWORD_SKINS: { name: string; desc: string }[] = [
+  { name: 'Silver Surfer', desc: 'krom murni — papan reflektif ala Silver Surfer' },
+  { name: 'Baja Asli', desc: 'bilah baja kebiruan + gagang emas (klasik)' },
+];
+
+/** World/biome mode presets — ganti kapan saja, medan langsung terbangun ulang. */
+export const WORLD_PRESETS: FeelPreset[] = [
+  {
+    name: 'Petualangan ✦',
+    desc: 'DEFAULT: biome berganti mulus selama turun — gurun → ngarai → kuil',
+    values: { worldMode: 0 },
+  },
+  {
+    name: 'Gurun Pasir',
+    desc: 'mega dunes ridged + riak angin anisotropik, palem di kejauhan',
+    values: { worldMode: 1 },
+  },
+  {
+    name: 'Ngarai Merah',
+    desc: 'teras mesa 9 m & butte raksasa merah berlapis strata, kaktus',
+    values: { worldMode: 2 },
+  },
+  {
+    name: 'Reruntuhan Kuil',
+    desc: 'dataran tenang — platform, pilar & obelisk (20% roboh)',
+    values: { worldMode: 3 },
+  },
+];
 
 /** One-click complete "glide" presets. */
 export const FEEL_PRESETS: FeelPreset[] = [

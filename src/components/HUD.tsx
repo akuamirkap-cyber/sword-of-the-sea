@@ -32,6 +32,9 @@ export function Hud({
       {/* speed streaks */}
       <div className="speedlines pointer-events-none absolute inset-0 z-10" style={{ opacity: speedLines }} />
 
+      {/* bodycam frame (mode kamera 4) */}
+      {stats.camStyle === 3 && <BodycamOverlay stats={stats} />}
+
       {/* top left : score */}
       <div className="pointer-events-none absolute top-5 left-5 z-20 sm:top-7 sm:left-8">
         <Label>score</Label>
@@ -218,6 +221,25 @@ export function Hud({
             <span className="tnum text-[10px] text-sand-100/80">{fmt(stats.navDist)} m</span>
           </div>
         )}
+        {/* sinar putih — tujuan utama */}
+        {stats.beamOn && (
+          <div
+            className="glass mt-2 flex items-center gap-2 rounded-full px-3 py-[5px]"
+            style={{ borderColor: 'rgba(255,255,255,0.6)', boxShadow: '0 0 18px rgba(255,255,255,0.25)' }}
+          >
+            <svg
+              viewBox="0 0 20 20"
+              className="h-4 w-4 transition-transform duration-150"
+              style={{ transform: `rotate(${(stats.beamBearing * 180) / Math.PI}deg)` }}
+            >
+              <path d="M10 1.5 L16 16 L10 12.5 L4 16 Z" fill="#ffffff" />
+            </svg>
+            <span className="anim-breathe text-[9px] font-semibold tracking-[0.24em] text-white uppercase">
+              ✦ sinar
+            </span>
+            <span className="tnum text-[10px] font-semibold text-sand-50">{fmt(stats.beamDist)} m</span>
+          </div>
+        )}
         {stats.onWater && (
           <div className="mt-1 text-[8px] tracking-[0.34em] text-cyan-100/70 uppercase">〰 di atas sungai</div>
         )}
@@ -362,7 +384,8 @@ export function Popups({ items }: { items: PopupEvent[] }) {
 }
 
 const KEYS: [string, string][] = [
-  ['SPACE', 'lompat · lagi di udara = AIR JUMP · tahan = flip'],
+  ['KLIK KIRI', 'FREESTYLE otomatis — tiap klik gaya beda, acak adil tanpa terlewat'],
+  ['KLIK KANAN / SPACE', 'lompat · lagi di udara = AIR JUMP · tahan = flip'],
   ['Q / E', 'manuver mengelak kilat kiri / kanan (hindari batu)'],
   ['S / ↓', 'AUTO frontflip · mendarat pas otomatis'],
   ['E', 'AUTO backflip (saat di udara)'],
@@ -372,8 +395,35 @@ const KEYS: [string, string][] = [
   ['A / D', 'carve · spin di udara'],
   ['SHIFT', 'boost · GRAB di udara'],
   ['W / ↑', 'air jump juga (pakai 10 flow)'],
+  ['1 / 2 / 3 / 4', 'kamera: klasik · SEKIRO third-person · sinematik · BODYCAM'],
+  ['DRAG · SCROLL', 'semua mode: drag = sudut kamera · scroll = zoom'],
   ['R · T', 'run baru · setting'],
 ];
+
+/** Overlay bodycam: sudut bingkai + REC + baterai (dari shield) — pure DOM. */
+function BodycamOverlay({ stats }: { stats: HudStats }) {
+  const t = Math.max(0, stats.runTime);
+  const mm = String(Math.floor(t / 60)).padStart(2, '0');
+  const ss = String(Math.floor(t % 60)).padStart(2, '0');
+  const bat = Math.max(0, Math.round((stats.shield / Math.max(1, stats.maxShield)) * 100));
+  const corner = 'absolute h-7 w-7 border-sand-50/70';
+  return (
+    <div className="pointer-events-none absolute inset-0 z-10 font-mono">
+      <div className={`${corner} top-4 left-4 rounded-tl-md border-t-2 border-l-2`} />
+      <div className={`${corner} top-4 right-4 rounded-tr-md border-t-2 border-r-2`} />
+      <div className={`${corner} bottom-4 left-4 rounded-bl-md border-b-2 border-l-2`} />
+      <div className={`${corner} bottom-4 right-4 rounded-br-md border-b-2 border-r-2`} />
+      <div className="absolute top-[4.6rem] right-9 flex items-center gap-2 text-[11px] tracking-[0.18em] text-sand-50/90">
+        <span className="h-2 w-2 animate-pulse rounded-full bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.9)]" />
+        REC {mm}:{ss}
+        <span className="ml-2 text-sand-50/60">BAT {bat}%</span>
+      </div>
+      <div className="absolute bottom-[4.2rem] right-9 text-[9px] tracking-[0.26em] text-sand-50/50">
+        BODYCAM V1 · 1080p60
+      </div>
+    </div>
+  );
+}
 
 export function StartScreen({
   best,

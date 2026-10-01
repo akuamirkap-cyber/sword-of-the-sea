@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { NO_WATER, RUN, baseDune, clamp, mix, worldSample, type WorldSample } from './noise';
+import { NO_WATER, RUN, baseDune, biomeWeights, clamp, mix, worldSample, type WorldSample } from './noise';
 
 // ---------------------------------------------------------------------------
 // One single mesh covers the whole world around the rider. It slides in 4 unit
@@ -186,6 +186,11 @@ export class TerrainField {
       const jm = j > 0 ? j - 1 : 0;
       const jp = j < nz - 1 ? j + 1 : nz - 1;
       const cj = this.baseJ + j - this.cz;
+      // tint biome per baris (dikali — mood langit/palet tetap berlaku di atasnya)
+      const bw = biomeWeights(cj * cell);
+      const tintR = bw.dunes * 1.05 + bw.canyon * 0.98 + bw.temple * 1.04;
+      const tintG = bw.dunes * 0.93 + bw.canyon * 0.74 + bw.temple * 0.95;
+      const tintB = bw.dunes * 0.8 + bw.canyon * 0.62 + bw.temple * 0.76;
       for (let i = 0; i < nx; i++) {
         const k = j * nx + i;
         const im = i > 0 ? i - 1 : 0;
@@ -214,6 +219,18 @@ export class TerrainField {
         r *= lm;
         g *= lm;
         b *= lm;
+
+        // --- warna pasir per biome (multiply) + strata merah berlapis di ngarai
+        r *= tintR;
+        g *= tintG;
+        b *= tintB;
+        if (bw.canyon > 0.01) {
+          const strata = 1 + 0.09 * Math.sin(h * 1.4) * bw.canyon;
+          const sr = strata;
+          const sg = 1 + (strata - 1) * 0.3;
+          r *= sr;
+          g *= sg;
+        }
 
         // --- river: dark wet sand on the shore, cool deep tint under water
         const wd = this.wet[k];

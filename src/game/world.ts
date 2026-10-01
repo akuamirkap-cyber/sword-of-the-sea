@@ -4,6 +4,7 @@ import {
   NO_WATER,
   RUN,
   baseDune,
+  biomeWeights,
   chasmAt,
   chasmOfSeg,
   duneHeight,
@@ -362,7 +363,7 @@ export class Monoliths {
   private arches: THREE.InstancedMesh;
 
   private countRuin: number;
-  private countRock = 18;
+  private countRock = 9; // batu lebih jarang = downhill aman ala Alto
   private countStatue = 8;
   private countArch = 6;
 
@@ -485,7 +486,8 @@ export class Monoliths {
     this.arches.frustumCulled = false;
 
     this.group.add(this.stones);
-    this.group.add(this.beacons);
+    // CATATAN: "permata melayang di atas reruntuhan" (beacons) sengaja DIHAPUS
+    // dari scene — permata sekarang hanya yang bisa diambil (EnergyCrystals).
     this.group.add(this.boulders);
     this.group.add(this.statues);
     this.group.add(this.statueEyes);
@@ -592,7 +594,8 @@ export class Monoliths {
     let z = 0;
     for (let tries = 0; tries < 8; tries++) {
       z = pz + dist + (Math.random() - 0.5) * 35;
-      x = pathX(z) + (Math.random() - 0.5) * 90;
+      // batu selalu minggir 14–72m dari garis tengah: jalur carving pusat tetap bersih & aman
+      x = pathX(z) + (14 + Math.random() * 58) * (Math.random() < 0.5 ? -1 : 1);
       const c = chasmAt(z);
       const nearGap = c !== null && z > c.z0 - 20 && z < c.z1 + 12;
       worldSample(x, z, this.ws);
@@ -699,6 +702,7 @@ export class Monoliths {
   update(px: number, pz: number, fx: number, fz: number, time: number) {
     void fx;
     void fz;
+    void time;
     // 1. Update ruins - spread far apart
     for (let i = 0; i < this.countRuin; i++) {
       const it = this.items[i];
@@ -707,15 +711,7 @@ export class Monoliths {
       if (Math.hypot(dx, dz) > 600 || dz < -60) {
         this.placeRuin(i, px, pz, 380 + Math.random() * 450);
       }
-      const y = it.y + it.h + 2.2 + Math.sin(time * 0.9 + it.seed) * 0.8;
-      this.eu.set(time * 0.25 + it.seed, time * 0.4 + it.seed, 0);
-      this.q.setFromEuler(this.eu);
-      this.v.set(it.x, y, it.z);
-      this.sc.set(0.55, 2.2, 0.55);
-      this.m4.compose(this.v, this.q, this.sc);
-      this.beacons.setMatrixAt(i, this.m4);
     }
-    this.beacons.instanceMatrix.needsUpdate = true;
 
     // 2. Update boulders
     for (let i = 0; i < this.countRock; i++) {
@@ -986,6 +982,12 @@ export class EnergyCrystals {
   group = new THREE.Group();
   private mesh: THREE.InstancedMesh;
   private mat: THREE.MeshStandardMaterial;
+  /** pendar lembut di sekitar permata (bukan sinar tajam) */
+  private halo: THREE.Points;
+  private haloSize: THREE.BufferAttribute;
+  private haloPos: THREE.BufferAttribute;
+  private haloSeed: Float32Array;
+  private haloU = { uTime: { value: 0 }, uMul: { value: 1 } };
   private count = 42;
   private m4 = new THREE.Matrix4();
   private q = new THREE.Quaternion();
@@ -993,6 +995,8 @@ export class EnergyCrystals {
   private sc = new THREE.Vector3();
   private zero = new THREE.Matrix4().makeScale(0, 0, 0);
   private items: { x: number; y: number; z: number; collected: boolean; seed: number }[] = [];
+  /** daftar obstacle (relic/patung/batu) yang harus dihindari permata */
+  private avoid: { x: number; z: number; r: number }[] = [];
 
   constructor() {
     const geo = new THREE.OctahedronGeometry(0.55, 0);
@@ -1007,21 +1011,98 @@ export class EnergyCrystals {
     this.mesh.frustumCulled = false;
     this.group.add(this.mesh);
 
+    // ---- PENDAR LEMBUT (bukan sinar tajam ke atas): halo bercahaya pelan
+    // di sekitar setiap permata yang bisa diambil — bernapas perlahan,
+    // menghilang saat permata terkoleksi. Terasa seperti kunang-kunang emas.
+    {
+      const pos = new Float32Array(this.count * 3);
+      const size = new Float32Array(this.count);
+      this.haloSeed = new Float32Array(this.count);
+      for (let i = 0; i < this.count; i++) this.haloSeed[i] = Math.random() * 9;
+      const geo = new THREE.BufferGeometry();
+      this.haloPos = new THREE.BufferAttribute(pos, 3);
+      this.haloSize = new THREE.BufferAttribute(size, 1);
+      this.haloPos.setUsage(THREE.DynamicDrawUsage);
+      this.haloSize.setUsage(THREE.DynamicDrawUsage);
+      geo.setAttribute('position', this.haloPos);
+      geo.setAttribute('aSize', this.haloSize);
+      geo.setAttribute('aSeed', new THREE.BufferAttribute(this.haloSeed, 1));
+      geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e6);
+      const mat = new THREE.ShaderMaterial({
+        uniforms: this.haloU,
+        vertexShader: `
+          attribute float aSize; attribute float aSeed;
+          uniform float uTime;
+          varying float vB;
+          void main(){
+            // bernapas pelan, tiap permata punya fasenya sendiri
+            vB = 0.62 + 0.38 * sin(uTime * 1.35 + aSeed * 6.28);
+            vec4 mv = modelViewMatrix * vec4(position, 1.0);
+            gl_PointSize = aSize * (300.0 / max(0.001, -mv.z));
+            gl_Position = projectionMatrix * mv;
+          }`,
+        fragmentShader: `
+          uniform float uMul;
+          varying float vB;
+          void main(){
+            float d = length(gl_PointCoord - 0.5) * 2.0;
+            // profil pendar: inti lembut + rok cahaya yang meluruh halus
+            float a = pow(max(0.0, 1.0 - d), 3.2) * 0.85 + pow(max(0.0, 1.0 - d), 1.6) * 0.16;
+            a *= vB * uMul;
+            if (a < 0.004) discard;
+            vec3 col = vec3(1.0, 0.86, 0.55) * a; // emas hangat
+            gl_FragColor = vec4(col, a);
+          }`,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      });
+      this.halo = new THREE.Points(geo, mat);
+      this.halo.frustumCulled = false;
+      this.halo.renderOrder = 4;
+      this.group.add(this.halo);
+    }
+
     for (let i = 0; i < this.count; i++) {
       this.items.push({ x: 0, y: 0, z: 0, collected: false, seed: Math.random() * 100 });
       this.place(i, 0, (i / this.count) * 1200 + 40);
     }
   }
 
+  /** daftar Hindari: permata tidak pernah muncul di atas / menempel relic */
+  setAvoid(list: { x: number; z: number; r: number }[]) {
+    this.avoid = list;
+  }
+
   setGlow(v: number) {
     this.mat.emissiveIntensity = 2.2 * v;
+    this.haloU.uMul.value = Math.min(1.35, v);
+  }
+
+  /** kandidat target lock-on kamera Sekiro */
+  lockCandidates(): readonly { x: number; y: number; z: number; collected: boolean }[] {
+    return this.items;
   }
 
   private place(i: number, pz: number, dist: number) {
     const z = pz + dist;
     // form gentle curving arcs along the trail or over launch mounds
     const spread = Math.sin(i * 0.4) * 28;
-    const x = pathX(z) + spread;
+    let x = pathX(z) + spread;
+    // jangan menempel pada relic / patung / batu: geser sampai bebas
+    if (this.avoid.length) {
+      for (let tries = 0; tries < 8; tries++) {
+        let hit = false;
+        for (const a of this.avoid) {
+          if (Math.hypot(x - a.x, z - a.z) < a.r + 7) {
+            hit = true;
+            break;
+          }
+        }
+        if (!hit) break;
+        x = pathX(z) + (Math.random() - 0.5) * 110;
+      }
+    }
     const y = duneHeight(x, z) + 1.6 + Math.sin(i * 0.8) * 1.2;
     const it = this.items[i];
     it.x = x;
@@ -1046,6 +1127,7 @@ export class EnergyCrystals {
       }
       if (it.collected) {
         this.mesh.setMatrixAt(i, this.zero);
+        this.haloSize.array[i] = 0;
         continue;
       }
       const bob = Math.sin(time * 3 + it.seed) * 0.25;
@@ -1054,8 +1136,17 @@ export class EnergyCrystals {
       this.sc.set(1, 1.35, 1);
       this.m4.compose(this.v, this.q, this.sc);
       this.mesh.setMatrixAt(i, this.m4);
+      // pendar lembut mengikuti permata (denyut ada di shader)
+      const hp = this.haloPos.array as Float32Array;
+      hp[i * 3] = it.x;
+      hp[i * 3 + 1] = it.y + bob * 0.4;
+      hp[i * 3 + 2] = it.z;
+      this.haloSize.array[i] = 2.4;
     }
     this.mesh.instanceMatrix.needsUpdate = true;
+    this.haloPos.needsUpdate = true;
+    this.haloSize.needsUpdate = true;
+    this.haloU.uTime.value = time;
   }
 
   /** checks collection by player position; returns count of shards collected */
@@ -1137,6 +1228,331 @@ export function getMountainSector(dist: number): MountainSector {
     }
   }
   return MOUNTAIN_SECTORS[0];
+}
+
+// ---------------------------------------------------------------------------
+// BIOME SCENERY: dekorasi procedural per biome, semuanya instanced.
+// Gurun → pohon palem · Ngarai Merah → kaktus & butte mesa raksasa ·
+// Reruntuhan Kuil → platform, pilar (20% roboh), obelisk. Lorong jalur
+// |x − pathX| ≤ 14 selalu bersih; penempatan menolak sungai & jurang.
+// ---------------------------------------------------------------------------
+interface DecoItem {
+  x: number;
+  y: number;
+  z: number;
+  rot: number;
+  scale: number;
+  sy: number;
+  fallen: boolean;
+}
+type DecoKind = 'dunes' | 'canyon' | 'temple';
+
+export class BiomeScenery {
+  group = new THREE.Group();
+
+  private palmTrunks: THREE.InstancedMesh;
+  private palmCrowns: THREE.InstancedMesh;
+  private cacti: THREE.InstancedMesh;
+  private mesas: THREE.InstancedMesh;
+  private platforms: THREE.InstancedMesh;
+  private pillars: THREE.InstancedMesh;
+  private obelisks: THREE.InstancedMesh;
+
+  private palmItems: DecoItem[] = [];
+  private cactiItems: DecoItem[] = [];
+  private mesaItems: DecoItem[] = [];
+  private platformItems: DecoItem[] = [];
+  private pillarItems: DecoItem[] = [];
+  private obeliskItems: DecoItem[] = [];
+
+  private static N_PALM = 26;
+  private static N_CACTI = 20;
+  private static N_MESA = 8;
+  private static N_PLATFORM = 6;
+  private static N_PILLAR = 30;
+  private static N_OBELISK = 10;
+
+  private m4 = new THREE.Matrix4();
+  private q = new THREE.Quaternion();
+  private v = new THREE.Vector3();
+  private sc = new THREE.Vector3();
+  private eu = new THREE.Euler();
+  private zero = new THREE.Matrix4().makeScale(0, 0, 0);
+  private ws: WorldSample = { h: 0, level: 0, surf: 0, e: 1e9 };
+
+  constructor() {
+    // --- PALEM (Gurun Pasir): batang + mahkota 7 kerucut daun ---
+    const trunkGeo = new THREE.CylinderGeometry(0.26, 0.48, 9, 5);
+    trunkGeo.translate(0, 4.5, 0);
+    const trunkMat = new THREE.MeshStandardMaterial({
+      color: 0x8a6a44,
+      roughness: 0.95,
+      flatShading: true,
+      emissive: new THREE.Color(0x221708),
+      emissiveIntensity: 0.28,
+    });
+    this.palmTrunks = new THREE.InstancedMesh(trunkGeo, trunkMat, BiomeScenery.N_PALM);
+    this.palmTrunks.frustumCulled = false;
+    const fronds: THREE.BufferGeometry[] = [];
+    for (let i = 0; i < 7; i++) {
+      const f = new THREE.ConeGeometry(0.55, 4.4, 4);
+      f.translate(0, -2.1, 0); // pangkal di titik puncak batang
+      f.rotateX(Math.PI * 0.62);
+      f.rotateY((i / 7) * Math.PI * 2);
+      fronds.push(f);
+    }
+    const crownGeo = mergeBufferGeometries(fronds);
+    const crownMat = new THREE.MeshStandardMaterial({
+      color: 0x5f8f52,
+      roughness: 0.9,
+      flatShading: true,
+      emissive: new THREE.Color(0x11240c),
+      emissiveIntensity: 0.4,
+    });
+    this.palmCrowns = new THREE.InstancedMesh(crownGeo, crownMat, BiomeScenery.N_PALM);
+    this.palmCrowns.frustumCulled = false;
+
+    // --- KAKTUS (Ngarai Merah): badan kapsul + 2 lengan ---
+    const cBody = new THREE.CapsuleGeometry(0.55, 3.0, 3, 7);
+    cBody.translate(0, 2.1, 0);
+    const cArmL = new THREE.CapsuleGeometry(0.34, 1.5, 3, 6);
+    cArmL.rotateZ(0.9);
+    cArmL.translate(-0.95, 2.5, 0);
+    const cArmR = new THREE.CapsuleGeometry(0.32, 1.3, 3, 6);
+    cArmR.rotateZ(-1.05);
+    cArmR.translate(0.9, 1.7, 0);
+    const cactiGeo = mergeBufferGeometries([cBody, cArmL, cArmR]);
+    const cactiMat = new THREE.MeshStandardMaterial({
+      color: 0x608a50,
+      roughness: 0.92,
+      flatShading: true,
+      emissive: new THREE.Color(0x14240e),
+      emissiveIntensity: 0.35,
+    });
+    this.cacti = new THREE.InstancedMesh(cactiGeo, cactiMat, BiomeScenery.N_CACTI);
+    this.cacti.frustumCulled = false;
+
+    // --- MESA / BUTTE (Ngarai Merah): silinder 7 sisi raksasa di sisi lembah ---
+    const mesaGeo = new THREE.CylinderGeometry(1, 1.22, 1, 7, 1);
+    mesaGeo.translate(0, 0.5, 0);
+    const mesaMat = new THREE.MeshStandardMaterial({
+      color: 0xa05238,
+      roughness: 0.96,
+      flatShading: true,
+      emissive: new THREE.Color(0x2a120a),
+      emissiveIntensity: 0.3,
+    });
+    this.mesas = new THREE.InstancedMesh(mesaGeo, mesaMat, BiomeScenery.N_MESA);
+    this.mesas.frustumCulled = false;
+
+    // --- PLATFORM KUIL ---
+    const platGeo = new THREE.BoxGeometry(15, 1.7, 15);
+    const platMat = new THREE.MeshStandardMaterial({
+      color: 0x9c8a70,
+      roughness: 0.9,
+      flatShading: true,
+      emissive: new THREE.Color(0x221c12),
+      emissiveIntensity: 0.3,
+    });
+    this.platforms = new THREE.InstancedMesh(platGeo, platMat, BiomeScenery.N_PLATFORM);
+    this.platforms.frustumCulled = false;
+
+    // --- PILAR KUIL (20% roboh) ---
+    const pillarGeo = new THREE.CylinderGeometry(0.65, 0.82, 7, 8);
+    pillarGeo.translate(0, 3.5, 0);
+    const pillarMat = new THREE.MeshStandardMaterial({
+      color: 0xa89474,
+      roughness: 0.88,
+      flatShading: true,
+      emissive: new THREE.Color(0x241d12),
+      emissiveIntensity: 0.28,
+    });
+    this.pillars = new THREE.InstancedMesh(pillarGeo, pillarMat, BiomeScenery.N_PILLAR);
+    this.pillars.frustumCulled = false;
+
+    // --- OBELISK KUIL (4 sisi meruncing) ---
+    const obGeo = new THREE.CylinderGeometry(0.34, 1.15, 11, 4);
+    obGeo.translate(0, 5.5, 0);
+    const obMat = new THREE.MeshStandardMaterial({
+      color: 0x8f7e66,
+      roughness: 0.85,
+      flatShading: true,
+      emissive: new THREE.Color(0x1f1910),
+      emissiveIntensity: 0.36,
+    });
+    this.obelisks = new THREE.InstancedMesh(obGeo, obMat, BiomeScenery.N_OBELISK);
+    this.obelisks.frustumCulled = false;
+
+    this.group.add(this.palmTrunks, this.palmCrowns, this.cacti, this.mesas, this.platforms, this.pillars, this.obelisks);
+  }
+
+  private newItem(): DecoItem {
+    return { x: 0, y: -4000, z: -1e9, rot: 0, scale: 1, sy: 1, fallen: false };
+  }
+
+  /**
+   * Cari tempat legal untuk 1 dekorasi: biome cocok (mode auto), landai,
+   * bukan sungai/jurang, dan lorong jalur tetap bersih. Retry 6×.
+   */
+  private place(it: DecoItem, kind: DecoKind, pz: number, dist: number, minLane = 15): boolean {
+    for (let t = 0; t < 6; t++) {
+      const z = pz + dist + Math.random() * 260;
+      const b = biomeWeights(z);
+      const w = kind === 'dunes' ? b.dunes : kind === 'canyon' ? b.canyon : b.temple;
+      if (w < 0.3) continue;
+      const span = kind === 'canyon' ? 200 : 160;
+      const x = pathX(z) + (minLane + Math.random() * span) * (Math.random() < 0.5 ? -1 : 1);
+      if (Math.abs(x - pathX(z)) < 14) continue;
+      worldSample(x, z, this.ws);
+      if (this.ws.level > NO_WATER && this.ws.e < 7) continue; // sungai
+      if (baseDune(x, z) - this.ws.h > 1.2) continue; // dinding jurang
+      const hx1 = duneHeight(x + 2, z);
+      const hx2 = duneHeight(x - 2, z);
+      const hz1 = duneHeight(x, z + 2);
+      const hz2 = duneHeight(x, z - 2);
+      const gx = (hx1 - hx2) * 0.25;
+      const gz = (hz1 - hz2) * 0.25;
+      if (1 / Math.sqrt(1 + gx * gx + gz * gz) < 0.55) continue; // terlalu curam
+      it.x = x;
+      it.z = z;
+      it.y = this.ws.h;
+      it.rot = Math.random() * Math.PI * 2;
+      return true;
+    }
+    return false;
+  }
+
+  private writeInst(
+    mesh: THREE.InstancedMesh,
+    idx: number,
+    it: DecoItem,
+    sink: number,
+    sxMul: number,
+    syMul: number,
+    szMul: number,
+    crown?: THREE.InstancedMesh,
+  ) {
+    if (it.z < -1e8) {
+      mesh.setMatrixAt(idx, this.zero);
+      if (crown) crown.setMatrixAt(idx, this.zero);
+      return;
+    }
+    if (it.fallen) {
+      this.eu.set(Math.PI * 0.5 + (Math.sin(it.rot) * 0.08), it.rot, 0);
+      this.q.setFromEuler(this.eu);
+      this.v.set(it.x, it.y + it.scale, it.z);
+    } else {
+      this.eu.set(0, it.rot, 0);
+      this.q.setFromEuler(this.eu);
+      this.v.set(it.x, it.y - sink, it.z);
+    }
+    this.sc.set(it.scale * sxMul, it.sy * syMul, it.scale * szMul);
+    this.m4.compose(this.v, this.q, this.sc);
+    mesh.setMatrixAt(idx, this.m4);
+    if (crown) crown.setMatrixAt(idx, this.m4);
+  }
+
+  /** spawn ulang SEMUA dekorasi (dipanggil saat ganti mode dunia / mulai run) */
+  respawnAll(px: number, pz: number) {
+    this.palmItems = [];
+    this.cactiItems = [];
+    this.mesaItems = [];
+    this.platformItems = [];
+    this.pillarItems = [];
+    this.obeliskItems = [];
+    void px; // penempatan x berbasis pathX(z), bukan px rider
+    for (let i = 0; i < BiomeScenery.N_PALM; i++) {
+      const it = this.newItem();
+      it.scale = 0.8 + Math.random() * 0.7;
+      it.sy = it.scale * (0.85 + Math.random() * 0.45);
+      this.place(it, 'dunes', pz - 120, 240, 18);
+      this.palmItems.push(it);
+    }
+    for (let i = 0; i < BiomeScenery.N_CACTI; i++) {
+      const it = this.newItem();
+      it.scale = 0.8 + Math.random() * 0.9;
+      it.sy = it.scale * (0.7 + Math.random() * 0.8);
+      this.place(it, 'canyon', pz - 120, 240);
+      this.cactiItems.push(it);
+    }
+    for (let i = 0; i < BiomeScenery.N_MESA; i++) {
+      const it = this.newItem();
+      it.scale = 18 + Math.random() * 24; // radius 18–42 m
+      it.sy = 55 + Math.random() * 55; // tinggi 55–110 m
+      this.place(it, 'canyon', pz - 120, 260, 60);
+      this.mesaItems.push(it);
+    }
+    for (let i = 0; i < BiomeScenery.N_PLATFORM; i++) {
+      const it = this.newItem();
+      it.scale = 0.7 + Math.random() * 0.9;
+      it.sy = 1;
+      this.place(it, 'temple', pz - 120, 240);
+      this.platformItems.push(it);
+    }
+    for (let i = 0; i < BiomeScenery.N_PILLAR; i++) {
+      const it = this.newItem();
+      it.scale = 0.7 + Math.random() * 0.7;
+      it.sy = it.scale * (0.6 + Math.random() * 0.9);
+      it.fallen = Math.random() < 0.2;
+      this.place(it, 'temple', pz - 120, 240);
+      this.pillarItems.push(it);
+    }
+    for (let i = 0; i < BiomeScenery.N_OBELISK; i++) {
+      const it = this.newItem();
+      it.scale = 0.55 + Math.random() * 0.75;
+      it.sy = it.scale * (0.7 + Math.random() * 0.9);
+      it.fallen = Math.random() < 0.2;
+      this.place(it, 'temple', pz - 120, 240);
+      this.obeliskItems.push(it);
+    }
+    this.writeAll(pz);
+  }
+
+  /** tulis ulang matrix semua instance (dipakai respawnAll & update) */
+  private writeAll(pz: number) {
+    for (let i = 0; i < this.palmItems.length; i++) {
+      const it = this.palmItems[i];
+      if (it.z < pz - 60 && it.z > -1e8) this.place(it, 'dunes', pz, 300, 18) || (it.z = -1e9);
+      this.writeInst(this.palmTrunks, i, it, 0.35, 1, 1, 1, this.palmCrowns);
+    }
+    for (let i = 0; i < this.cactiItems.length; i++) {
+      const it = this.cactiItems[i];
+      if (it.z < pz - 60 && it.z > -1e8) this.place(it, 'canyon', pz, 300) || (it.z = -1e9);
+      this.writeInst(this.cacti, i, it, 0.3, 1, 1, 1);
+    }
+    for (let i = 0; i < this.mesaItems.length; i++) {
+      const it = this.mesaItems[i];
+      if (it.z < pz - 220 && it.z > -1e8) this.place(it, 'canyon', pz, 340, 60) || (it.z = -1e9);
+      this.writeInst(this.mesas, i, it, 4, 1, 1, 1);
+    }
+    for (let i = 0; i < this.platformItems.length; i++) {
+      const it = this.platformItems[i];
+      if (it.z < pz - 60 && it.z > -1e8) this.place(it, 'temple', pz, 300) || (it.z = -1e9);
+      this.writeInst(this.platforms, i, it, 0.55, 1, 1, 1);
+    }
+    for (let i = 0; i < this.pillarItems.length; i++) {
+      const it = this.pillarItems[i];
+      if (it.z < pz - 60 && it.z > -1e8) this.place(it, 'temple', pz, 300) || (it.z = -1e9);
+      this.writeInst(this.pillars, i, it, 0.3, 1, 1, 1);
+    }
+    for (let i = 0; i < this.obeliskItems.length; i++) {
+      const it = this.obeliskItems[i];
+      if (it.z < pz - 60 && it.z > -1e8) this.place(it, 'temple', pz, 300) || (it.z = -1e9);
+      this.writeInst(this.obelisks, i, it, 0.5, 1, 1, 1);
+    }
+    this.palmTrunks.instanceMatrix.needsUpdate = true;
+    this.palmCrowns.instanceMatrix.needsUpdate = true;
+    this.cacti.instanceMatrix.needsUpdate = true;
+    this.mesas.instanceMatrix.needsUpdate = true;
+    this.platforms.instanceMatrix.needsUpdate = true;
+    this.pillars.instanceMatrix.needsUpdate = true;
+    this.obelisks.instanceMatrix.needsUpdate = true;
+  }
+
+  /** panggil tiap frame di samping monoliths.update — spawn maju saat rider turun */
+  update(_px: number, pz: number) {
+    this.writeAll(pz);
+  }
 }
 
 export type { Palette };

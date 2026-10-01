@@ -35,6 +35,9 @@ const INITIAL: HudStats = {
   navBearing: 0,
   navDrop: 0,
   onWater: false,
+  beamOn: false,
+  beamDist: 0,
+  beamBearing: 0,
   gapOn: false,
   gapDist: 0,
   gapW: 0,
@@ -47,6 +50,8 @@ const INITIAL: HudStats = {
   sectorSubtitle: 'Pasir lembut',
   altitudeDrop: 0,
   crystalsCollected: 0,
+  camStyle: 1,
+  runTime: 0,
 };
 
 export default function App() {
@@ -143,7 +148,7 @@ export default function App() {
     <div className="relative h-full w-full overflow-hidden bg-[#101820]">
       <div ref={mountRef} className="absolute inset-0" />
 
-      <div className="vignette pointer-events-none absolute inset-0 z-10" />
+      {/* vignette gelap dihilangkan — layar jernih penuh */}
       <div className="grain pointer-events-none absolute inset-0 z-10" />
 
       {state !== 'menu' && (
@@ -220,7 +225,7 @@ export default function App() {
       {state === 'playing' && !showTune && (
         <div className="pointer-events-none absolute bottom-6 left-5 z-20 hidden sm:block sm:left-8">
           <div className="text-[9px] tracking-[0.34em] text-sand-200/50 uppercase">
-            space lompat/air jump · Q/E elak batu · J K L I U O flip pedang · Z X C V B G grab · S E F auto · T setting
+            klik kiri = freestyle otomatis · klik kanan/space = lompat · Q/E elak · 1/2/3/4 kamera · drag = sudut kamera · scroll = zoom · T setting
           </div>
         </div>
       )}

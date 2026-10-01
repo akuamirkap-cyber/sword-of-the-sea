@@ -3,11 +3,14 @@ import { PALETTES } from '../game/palette';
 import {
   AIR_PRESETS,
   BLOOM_PRESETS,
+  CAM_PRESETS,
   DEFAULT_TUNE,
   FEEL_PRESETS,
   FOG_PRESETS,
   LIGHT_PRESETS,
   MASTER_PRESETS,
+  SWORD_SKINS,
+  WORLD_PRESETS,
   type Tune,
 } from '../game/tune';
 import { ETHEREAL_SKINS, SCARF_COLORS } from '../game/scarf';
@@ -16,20 +19,22 @@ import { BOARD_TRICKS, GRABS } from '../game/tricks';
 import { WATER_PALETTES } from '../game/river';
 
 const BODY_PRESETS = [
-  { name: 'Cebol', desc: 'chibi kepala besar (default)', v: { bodyHeight: 0.5, headSize: 1.7 } },
+  { name: 'Cebol', desc: 'chibi kepala besar', v: { bodyHeight: 0.5, headSize: 1.7 } },
   { name: 'Pendek', desc: 'mungil & lincah', v: { bodyHeight: 0.78, headSize: 1.12 } },
-  { name: 'Normal', desc: 'proporsi dewasa', v: { bodyHeight: 1, headSize: 1 } },
+  { name: 'Normal', desc: 'proporsi dewasa (default) ala Silver Surfer', v: { bodyHeight: 1, headSize: 1 } },
 ];
 
-type Tab = 'feel' | 'air' | 'book' | 'bloom' | 'light' | 'fog' | 'water' | 'sky' | 'scarf' | 'grade' | 'cam' | 'fx';
+type Tab = 'feel' | 'move' | 'air' | 'book' | 'bloom' | 'light' | 'fog' | 'world' | 'water' | 'sky' | 'scarf' | 'grade' | 'cam' | 'fx';
 
 const TABS: [Tab, string][] = [
   ['feel', 'Hover'],
+  ['move', 'Gerakan'],
   ['air', 'Udara & Trik'],
   ['book', 'Buku Trik'],
   ['bloom', 'Bloom'],
   ['light', 'Cahaya'],
   ['fog', 'Kabut'],
+  ['world', 'Dunia'],
   ['sky', 'Langit & Paus'],
   ['scarf', 'Karakter & Slayer'],
   ['grade', 'Warna'],
@@ -432,6 +437,15 @@ export function SettingsPanel({
                 ))}
               </div>
               <Toggle label="putar waktu otomatis" on={l.cycle} onChange={(v) => set({ cycle: v })} />
+              <Slider
+                label="aurora ✦"
+                hint="tirai cahaya polar — warnanya otomatis menyesuaikan palet langit"
+                value={l.aurora}
+                min={0}
+                max={2}
+                onChange={(v) => set({ aurora: v })}
+                fmt={(v) => (v === 0 ? 'mati' : v < 0.8 ? 'samar' : v < 1.4 ? 'normal' : 'gemilang')}
+              />
 
               <div className="mt-6 text-[9px] font-semibold uppercase tracking-[0.3em] text-sand-200/60">
                 🐋 paus langit
@@ -825,6 +839,65 @@ export function SettingsPanel({
               >
                 ikuti mood langit
               </button>
+            </>
+          )}
+
+          {tab === 'move' && (
+            <>
+              <div className="mb-2 text-[9px] font-semibold uppercase tracking-[0.3em] text-sand-200/60">
+                gerakan & kontrol — carv, luncur & tanjakan
+              </div>
+              <Slider
+                label="kecepatan belok ✦"
+                hint="seberapa cepat rider carve kiri/kanan (A · D)"
+                value={l.turn}
+                min={0.3}
+                max={2.5}
+                onChange={(v) => set({ turn: v })}
+                fmt={(v) => (v < 0.7 ? 'pelayar' : v < 1.4 ? 'normal' : v < 2 ? 'lincah' : 'belut')}
+              />
+              <Slider
+                label="belok di udara"
+                hint="kontrol arah saat melayang (spin di udara tetap dari tune trik)"
+                value={l.airTurn}
+                min={0.2}
+                max={1.3}
+                onChange={(v) => set({ airTurn: v })}
+                fmt={(v) => `${Math.round(v * 100)}%`}
+              />
+              <Slider
+                label="kecepatan luncur"
+                hint="pace keseluruhan menuruni gunung"
+                value={l.speed}
+                min={0.5}
+                max={1.6}
+                onChange={(v) => set({ speed: v })}
+                fmt={(v) => (v < 0.8 ? 'santai' : v < 1.2 ? 'normal' : 'ngebut')}
+              />
+              <Slider
+                label="daya tanjakan"
+                hint="0 = tanjakan benar-benar memperlambat · 1 = tanjakan gratis"
+                value={l.climb}
+                min={0}
+                max={1}
+                onChange={(v) => set({ climb: v })}
+                fmt={(v) => (v < 0.3 ? 'realistis' : v < 0.7 ? 'seimbang' : 'bebas mendaki')}
+              />
+              <Slider
+                label="kecepatan minimum"
+                hint="jarak per detik yang tak pernah hilang walau di tanjakan"
+                value={l.minSpeed}
+                min={0}
+                max={40}
+                step={1}
+                onChange={(v) => set({ minSpeed: v })}
+                fmt={(v) => `${Math.round(v)} m/s`}
+              />
+              <div className="mt-4 rounded-2xl border border-sand-200/20 bg-black/25 px-3 py-2 text-[9px] leading-relaxed text-sand-200/65">
+                gravitasi, melayang di puncak, kecepatan salto & spin ada di tab
+                <b> Udara &amp; Trik</b> · freestyle otomatis: <b>KLIK KIRI</b> — tiap klik
+                gaya berbeda, acak adil tanpa gaya terlewat.
+              </div>
             </>
           )}
 
@@ -1506,6 +1579,64 @@ export function SettingsPanel({
                 ))}
               </div>
 
+              {/* ---------------- papan seluncur */}
+              <div className="mt-6 mb-2 text-[9px] font-semibold uppercase tracking-[0.3em] text-sand-200/60">
+                papan seluncur — gaya seluncur
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  ['Papan Silver Surfer', 'papan surf krom ikonik (default)', 0],
+                  ['Pedang', 'pedang skate klasik — kalau bosan papan', 1],
+                ] as [string, string, number][]).map(([name, desc, v]) => (
+                  <button
+                    key={name}
+                    onClick={() => set({ boardType: v })}
+                    className={`rounded-xl border px-3 py-2 text-left transition ${
+                      Math.round(l.boardType) % 2 === v
+                        ? 'border-sand-100/90 bg-white/15'
+                        : 'border-sand-200/25 bg-black/20 hover:border-sand-100/70'
+                    }`}
+                  >
+                    <div
+                      className="mb-1 h-3 w-full rounded-full"
+                      style={{
+                        background:
+                          v === 0
+                            ? 'linear-gradient(90deg,#f8fbff,#c9d8ec 30%,#ffffff 55%,#b8c9e0)'
+                            : 'linear-gradient(90deg,#e8f0fb,#b9c9e0 55%,#efca85)',
+                        boxShadow: 'inset 0 0 6px rgba(255,255,255,0.8)',
+                      }}
+                    />
+                    <div className="font-display text-[14px] leading-none">{name}</div>
+                    <div className="mt-1 text-[7px] leading-tight uppercase tracking-[0.1em] text-sand-200/55">
+                      {desc}
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-4 mb-2 text-[9px] font-semibold uppercase tracking-[0.3em] text-sand-200/60">
+                skin logam (papan & pedang)
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {SWORD_SKINS.map((s, i) => (
+                  <button
+                    key={s.name}
+                    onClick={() => set({ swordSkin: i })}
+                    className={`rounded-xl border px-3 py-2 text-left transition ${
+                      Math.round(l.swordSkin ?? 0) === i
+                        ? 'border-sand-100/90 bg-white/15'
+                        : 'border-sand-200/25 bg-black/20 hover:border-sand-100/70'
+                    }`}
+                  >
+                    <div className="font-display text-[14px] leading-none">{s.name}</div>
+                    <div className="mt-1 text-[7px] leading-tight uppercase tracking-[0.1em] text-sand-200/55">
+                      {s.desc}
+                    </div>
+                  </button>
+                ))}
+              </div>
+
               {/* ---------------- scarf skin */}
               <div className="mt-6 mb-2 text-[9px] font-semibold uppercase tracking-[0.3em] text-sand-200/60">
                 skin slayer
@@ -1605,6 +1736,19 @@ export function SettingsPanel({
               </div>
               <Toggle label="dua ujung (twin tail)" on={l.scarfTwin} onChange={(v) => set({ scarfTwin: v })} />
               <Toggle label="jejak cahaya dari leher" on={l.scarfGlow} onChange={(v) => set({ scarfGlow: v })} />
+              <Toggle
+                label="sulaman emas ala journey ✦"
+                on={l.scarfEmbroidery}
+                onChange={(v) => set({ scarfEmbroidery: v })}
+              />
+              <Slider
+                label="pendar sulaman emas"
+                hint="simbol emas di slayer menyala mengikuti energi flow"
+                value={l.scarfEmbroideryGlow}
+                min={0}
+                max={2}
+                onChange={(v) => set({ scarfEmbroideryGlow: v })}
+              />
               <div className="mt-3 grid grid-cols-3 gap-2">
                 {[
                   ['Syal Pendek', { scarfLength: 1.4, scarfWidth: 0.24, scarfFlutter: 0.8 }],
@@ -1683,10 +1827,187 @@ export function SettingsPanel({
             </>
           )}
 
+          {tab === 'world' && (
+            <>
+              <div className="mb-2 text-[9px] font-semibold uppercase tracking-[0.3em] text-sand-200/60">
+                mode dunia — medan langsung terbangun ulang
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {WORLD_PRESETS.map((p) => {
+                  const active = Math.round(l.worldMode) === Math.round(p.values.worldMode ?? 0);
+                  return (
+                    <button
+                      key={p.name}
+                      onClick={() => set(p.values)}
+                      className={`rounded-xl border px-2 py-2 text-left transition ${
+                        active
+                          ? 'border-sand-100/80 bg-white/15'
+                          : 'border-sand-200/25 bg-black/20 hover:border-sand-100/70 hover:bg-white/10'
+                      }`}
+                    >
+                      <div className="font-display text-[15px] leading-none">{p.name}</div>
+                      <div className="mt-1 text-[7px] leading-tight uppercase tracking-[0.1em] text-sand-200/55">
+                        {p.desc}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-3 rounded-xl border border-sand-200/20 bg-black/25 px-3 py-2 text-[9px] leading-relaxed text-sand-200/65">
+                Dunia dibangkitkan murni dari fungsi matematika (simplex noise + ridged,
+                seed tetap) — bantalan medan tidak pernah disimpan, jadi ngarai, sungai
+                & jurang selalu sama di titik yang sama. Transisi antar biome memakai
+                noise 1D lambat dan selalu mulus tanpa garis batas.
+              </div>
+            </>
+          )}
+
           {tab === 'cam' && (
             <>
+              <div className="mb-2 text-[9px] font-semibold uppercase tracking-[0.3em] text-sand-200/60">
+                mode kamera — sekali klik (atau tekan 1 – 4)
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {CAM_PRESETS.map((p) => {
+                  const active = Math.round(l.camStyle) === Math.round(p.values.camStyle ?? 0);
+                  return (
+                    <button
+                      key={p.name}
+                      onClick={() => set(p.values)}
+                      className={`rounded-xl border px-2 py-2 text-left transition ${
+                        active
+                          ? 'border-sand-100/80 bg-white/15'
+                          : 'border-sand-200/25 bg-black/20 hover:border-sand-100/70 hover:bg-white/10'
+                      }`}
+                    >
+                      <div className="font-display text-[15px] leading-none">{p.name}</div>
+                      <div className="mt-1 text-[7px] leading-tight uppercase tracking-[0.1em] text-sand-200/55">
+                        {p.desc}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {(() => {
+                const m = Math.round(l.camStyle);
+                const cfg: {
+                  name: string;
+                  dist: 'cam0Dist' | 'cam1Dist' | 'cam2Dist' | 'cam3Dist';
+                  pitch: 'cam0Pitch' | 'cam1Pitch' | 'cam2Pitch' | 'cam3Pitch';
+                  yaw: 'cam0Yaw' | 'cam1Yaw' | 'cam2Yaw' | 'cam3Yaw';
+                  height: 'cam0Height' | 'cam1Height' | 'cam2Height' | 'cam3Height';
+                  pMin: number;
+                  pMax: number;
+                  yMin: number;
+                  yMax: number;
+                  pitchHint: string;
+                }[] = [
+                  {
+                    name: 'KLASIK',
+                    dist: 'cam0Dist',
+                    pitch: 'cam0Pitch',
+                    yaw: 'cam0Yaw',
+                    height: 'cam0Height',
+                    pMin: -5,
+                    pMax: 45,
+                    yMin: -75,
+                    yMax: 75,
+                    pitchHint: 'tinggi mata kamera (0° = sejajar rider)',
+                  },
+                  {
+                    name: 'SEKIRO',
+                    dist: 'cam1Dist',
+                    pitch: 'cam1Pitch',
+                    yaw: 'cam1Yaw',
+                    height: 'cam1Height',
+                    pMin: -20,
+                    pMax: 35,
+                    yMin: -60,
+                    yMax: 60,
+                    pitchHint: 'default 2° = third-person level (bukan top-down)',
+                  },
+                  {
+                    name: 'SWORD OF THE SEA',
+                    dist: 'cam2Dist',
+                    pitch: 'cam2Pitch',
+                    yaw: 'cam2Yaw',
+                    height: 'cam2Height',
+                    pMin: -5,
+                    pMax: 35,
+                    yMin: -90,
+                    yMax: 90,
+                    pitchHint: 'tinggi drone sinematik',
+                  },
+                  {
+                    name: 'BODYCAM',
+                    dist: 'cam3Dist',
+                    pitch: 'cam3Pitch',
+                    yaw: 'cam3Yaw',
+                    height: 'cam3Height',
+                    pMin: -30,
+                    pMax: 90,
+                    yMin: -45,
+                    yMax: 45,
+                    pitchHint: 'default 15° ala head-cam · 90° = menunduk penuh ke lintasan',
+                  },
+                ];
+                const c = cfg[m] ?? cfg[0];
+                return (
+                  <div className="mt-4 rounded-2xl border border-sand-200/20 bg-black/25 px-3 py-3">
+                    <div className="mb-1 text-[9px] font-semibold uppercase tracking-[0.3em] text-sand-200/70">
+                      penyetelan mode aktif — {c.name}
+                    </div>
+                    <Slider
+                      label="jarak mode ini"
+                      hint="mengalikan jarak khusus mode ini (bodycam default ×2.0, max ×50)"
+                      value={l[c.dist]}
+                      min={0.5}
+                      max={50}
+                      onChange={(v) => set({ [c.dist]: v } as Partial<Tune>)}
+                      fmt={(v) => `×${v.toFixed(2)}`}
+                    />
+                    <Slider
+                      label="tinggi kamera (mode ini)"
+                      hint="letak kamera: naikkan = lebih tinggi di atas rider, turunkan = lebih rendah"
+                      value={l[c.height]}
+                      min={-2}
+                      max={14}
+                      step={0.1}
+                      onChange={(v) => set({ [c.height]: v } as Partial<Tune>)}
+                      fmt={(v) => `${v > 0 ? '+' : ''}${v.toFixed(1)} m`}
+                    />
+                    <Slider
+                      label="sudut vertikal"
+                      hint={c.pitchHint}
+                      value={l[c.pitch]}
+                      min={c.pMin}
+                      max={c.pMax}
+                      step={1}
+                      onChange={(v) => set({ [c.pitch]: v } as Partial<Tune>)}
+                      fmt={(v) => `${Math.round(v)}°`}
+                    />
+                    <Slider
+                      label="sudut horizontal"
+                      hint="0° = tepat di belakang · makin besar makin serong"
+                      value={l[c.yaw]}
+                      min={c.yMin}
+                      max={c.yMax}
+                      step={1}
+                      onChange={(v) => set({ [c.yaw]: v } as Partial<Tune>)}
+                      fmt={(v) => `${Math.round(v)}°`}
+                    />
+                    <div className="mt-1 text-[8px] leading-relaxed uppercase tracking-[0.14em] text-sand-200/40">
+                      di dalam game: scroll = zoom instan · drag = sudut · diamkan → kembali
+                      ke penyetelan ini
+                    </div>
+                  </div>
+                );
+              })()}
+
               <Slider
-                label="jarak kamera"
+                label="jarak kamera (semua mode)"
+                hint="mengalikan semua gaya kamera"
                 value={l.camDist}
                 min={0.6}
                 max={1.7}

@@ -46,6 +46,143 @@ export function snoise(x: number, z: number): number {
   return vnoise(x, z) * 2 - 1;
 }
 
+// ---------------------------------------------------------------------------
+// PRNG deterministik + SIMPLEX NOISE 2D (seed 1337 → dunia selalu sama)
+// ---------------------------------------------------------------------------
+export function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const _perm = (() => {
+  const rnd = mulberry32(1337);
+  const p = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) p[i] = i;
+  for (let i = 255; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    const t = p[i];
+    p[i] = p[j];
+    p[j] = t;
+  }
+  const pp = new Uint8Array(512);
+  for (let i = 0; i < 512; i++) pp[i] = p[i & 255];
+  return pp;
+})();
+const _grad = new Float32Array([1, 1, -1, 1, 1, -1, -1, -1, 1, 0, -1, 0, 0, 1, 0, -1, 1, 0, -1, 0, 0, 1, 0, -1]);
+const F2 = 0.5 * (Math.sqrt(3) - 1);
+const G2 = (3 - Math.sqrt(3)) / 6;
+
+/** simplex noise 2D, hasil −1..1 (mulus antar tetangga, tanpa lompatan) */
+export function simplex2(xin: number, yin: number): number {
+  let n0 = 0;
+  let n1 = 0;
+  let n2 = 0;
+  const s = (xin + yin) * F2;
+  const i = Math.floor(xin + s);
+  const j = Math.floor(yin + s);
+  const t = (i + j) * G2;
+  const x0 = xin - (i - t);
+  const y0 = yin - (j - t);
+  let i1 = 0;
+  let j1 = 1;
+  if (x0 > y0) {
+    i1 = 1;
+    j1 = 0;
+  }
+  const x1 = x0 - i1 + G2;
+  const y1 = y0 - j1 + G2;
+  const x2 = x0 - 1 + 2 * G2;
+  const y2 = y0 - 1 + 2 * G2;
+  const ii = i & 255;
+  const jj = j & 255;
+  let t0 = 0.5 - x0 * x0 - y0 * y0;
+  if (t0 > 0) {
+    t0 *= t0;
+    const g = _perm[ii + _perm[jj]] % 12;
+    n0 = t0 * t0 * (_grad[g * 2] * x0 + _grad[g * 2 + 1] * y0);
+  }
+  let t1 = 0.5 - x1 * x1 - y1 * y1;
+  if (t1 > 0) {
+    t1 *= t1;
+    const g = _perm[ii + i1 + _perm[jj + j1]] % 12;
+    n1 = t1 * t1 * (_grad[g * 2] * x1 + _grad[g * 2 + 1] * y1);
+  }
+  let t2 = 0.5 - x2 * x2 - y2 * y2;
+  if (t2 > 0) {
+    t2 *= t2;
+    const g = _perm[ii + 1 + _perm[jj + 1]] % 12;
+    n2 = t2 * t2 * (_grad[g * 2] * x2 + _grad[g * 2 + 1] * y2);
+  }
+  return 70 * (n0 + n1 + n2);
+}
+
+/** ridged: (1 − |noise|)² → punggung tajam dengan lembah landai (0..1) */
+export function ridged2(x: number, z: number): number {
+  const r = 1 - Math.abs(simplex2(x, z));
+  return r * r;
+}
+
+// ---------------------------------------------------------------------------
+// WORLD MODE (pilihan biome): 0 = Petualangan (auto blend) · 1 Gurun · 2 Ngarai · 3 Kuil
+// ---------------------------------------------------------------------------
+const WORLD = { mode: 0 };
+export function setWorldMode(m: number) {
+  WORLD.mode = clamp(Math.round(m), 0, 3);
+}
+export function getWorldMode(): number {
+  return WORLD.mode;
+}
+export interface BiomeW {
+  dunes: number;
+  canyon: number;
+  temple: number;
+}
+const _bw: BiomeW = { dunes: 1, canyon: 0, temple: 0 };
+
+/**
+ * biomeWeights(z): bobot tiga biome yang SELALU berjumlah 1. Memakai noise 1D
+ * sangat lambat sehingga transisi antar biome mulus selama ratusan meter —
+ * tidak pernah ada "garis batas".
+ */
+export function biomeWeights(z: number, out: BiomeW = _bw): BiomeW {
+  if (WORLD.mode === 1) {
+    out.dunes = 1;
+    out.canyon = 0;
+    out.temple = 0;
+    return out;
+  }
+  if (WORLD.mode === 2) {
+    out.dunes = 0;
+    out.canyon = 1;
+    out.temple = 0;
+    return out;
+  }
+  if (WORLD.mode === 3) {
+    out.dunes = 0;
+    out.canyon = 0;
+    out.temple = 1;
+    return out;
+  }
+  const n = simplex2(z * 0.0011, 42.7) * 0.5 + 0.5;
+  out.canyon = smoothstep(0.5, 0.62, n) * (1 - smoothstep(0.74, 0.82, n));
+  out.temple = smoothstep(0.78, 0.88, n);
+  out.dunes = 1 - smoothstep(0.38, 0.5, n);
+  const s = out.dunes + out.canyon + out.temple;
+  if (s <= 0.0001) {
+    out.dunes = 1;
+    return out;
+  }
+  out.dunes /= s;
+  out.canyon /= s;
+  out.temple /= s;
+  return out;
+}
+
 /**
  * The dune field. Long ridges run roughly along X so you get beautiful
  * long carving lines, with domain warping so nothing ever repeats.
@@ -53,51 +190,70 @@ export function snoise(x: number, z: number): number {
 /**
  * The dune field: sculpted like a mega-huge gentle rolling mountain (gunung lembut mega besar).
  * Broad, colossal mountain harmonics + aerodynamic launch mounds (gundukan pelontar)
- * and an endless steep downhill slope (SLOPE = 0.48) that delivers a continuous, exhilarating
- * Alto's Odyssey 3D mountain descent without ever stalling or flattening out.
+ * and an endless wavy downhill slope (pitch bergelombang 0.30–0.86, rata-rata ~0.58)
+ * that delivers a continuous, exhilarating Alto's Odyssey 3D mountain descent.
  */
 export function baseDune(x: number, z: number): number {
-  const wq = 0.0085;
-  const wx = x + 50 * snoise(x * wq + 3.7, z * wq + 1.3);
-  const wz = z + 50 * snoise(x * wq + 12.1, z * wq + 8.4);
+  // domain warp (simplex) — bentuk mega tidak pernah berulang persis
+  const wq = 0.004;
+  const wx = x + 40 * simplex2(x * wq + 3.7, z * wq + 1.3);
+  const wz = z + 40 * simplex2(x * wq + 12.1, z * wq + 8.4);
 
+  const B = biomeWeights(z);
+  const rug = B.canyon * 0.85 + B.temple * 0.25; // kekasaran permukaan per biome
+
+  // ---- fractal layering (simplex + ridged) ----
   let h = 0;
-  // 1. Colossal mountain spurs & transverse ridges (runs across X): creates sweeping couloirs & natural valleys
-  h += 24.0 * snoise(wx * 0.0045, wz * 0.0012);
-  // 2. Secondary soft mountain shoulders
-  h += 12.0 * snoise(wx * 0.0095, wz * 0.0022);
-  // 3. Cascading rolling dunes & terraces along the descent path:
-  // Designed so maximum local uphill slope is <= 0.22, while RUN.SLOPE = 0.48.
-  // This guarantees the mountain is ALWAYS strictly sloping DOWNHILL (between -0.26 and -0.70)!
-  const cascadeRoll = Math.sin(wz * 0.0135 + snoise(wx * 0.005, wz * 0.003) * 1.5);
-  h += 9.0 * cascadeRoll;
-  h += 3.5 * Math.sin(wz * 0.032 + 1.4);
-  // 4. Subtle fine ripple for sand/snow texture
-  h += 0.35 * snoise(x * 0.09, z * 0.09);
+  h += 52 * (ridged2(wx * 0.0011 + 0.3, wz * 0.0013) - 0.42); // mega dunes (puncak 500–900 m)
+  h += 30 * (ridged2(wx * 0.002 + 7.3, wz * 0.0021 + 2.9) - 0.42); // bukit sekunder
+  h += (5 + 8 * rug) * simplex2(wx * 0.0065, wz * 0.0065); // undulasi menengah
+  h += (0.6 + 2.4 * rug) * simplex2(wx * 0.03, wz * 0.03); // tekstur permukaan
+  h += 0.16 * (1 - rug) * simplex2(x * 0.22 + z * 0.05, z * 0.05); // riak pasir anisotropik (gurun)
 
+  // NGARAI MERAH: teras MESA — ketinggian di-kuantisasi ke kelipatan 9 m dengan
+  // tepi smoothstep, lalu di-lerp 60%. Di lorong tengah jalur efeknya diredam
+  // supaya downhill tetap mulus & aman (tebing bertingkat menjulang di sisi).
+  if (B.canyon > 0.01) {
+    const lane = Math.abs(x - pathX(z));
+    const terrAmt = 0.6 * B.canyon * smoothstep(8, 42, lane);
+    if (terrAmt > 0.01) {
+      const step = 9;
+      const u = h / step;
+      const fl = Math.floor(u);
+      const q = (fl + smoothstep(0.25, 0.75, u - fl)) * step;
+      h = mix(h, q, terrAmt);
+    }
+  }
+  // RERUNTUHAN KUIL: dataran lebih rata & tenang
+  h = mix(h, h * 0.65, 0.5 * B.temple);
+
+  // ---- aturan global ----
+  // mangkuk halus: jalur carving tetap di tengah lembah
+  const dx = Math.abs(x - pathX(z));
+  h += dx * dx * 0.0006;
+  // dinding pegunungan raksasa di kedua sisi (peaks ridged skala kilometer, ×170 m)
+  if (dx > 55) {
+    const wall = smoothstep(55, 420, dx);
+    const pk = 0.5 + 0.5 * simplex2(z * 0.0009, 11.7);
+    h += wall * (40 + pk * 170);
+  }
+
+  // gameplay wajib: jurang + kicker pelontar sebelum bibir
   const ch = chasmOfSeg(Math.floor(z / RUN.L), _cb);
   if (ch) {
     const d = Math.max(ch.z0 - z, z - ch.z1, 0);
     h *= 0.32 + 0.68 * smoothstep(12, 70, d);
-    // gentle kicker ramp right before the lip (Alto-style launch out over the canyon)
     h += 3.2 * smoothstep(ch.z0 - 24, ch.z0 - 1, z) * (z < ch.z0 + 1 ? 1 : 0);
   }
 
-  // Gundukan pelontar (sculpted aerodynamic launch mounds) for Alto's Odyssey style air jumps:
+  // Gundukan pelontar (sculpted aerodynamic launch mounds) untuk air jump ala Alto:
   h += moundHeightAt(x, z);
 
-  // STEEP CONTINUOUS MOUNTAIN DOWNHILL DESCENT:
-  // Every 100m along +Z drops 48m down (-Y), giving a true ~26° alpine downhill descent!
-  h -= RUN.SLOPE * z;
-
-  // Open-world endless mountain descent:
-  // Wide open central corridor (>150m) for carving freely across the mega mountain.
-  // Gentle distant mountain ridges far out cradle the vista like majestic alpine shoulders.
-  const dx = Math.abs(x - pathX(z));
-  if (dx > 140) {
-    const far = dx - 140;
-    h += smoothstep(0, 180, far) * 22 + far * 0.05;
-  }
+  // DOWNHILL BERGELOMBANG (bukan lurus datar!): punggung landai (~0.30)
+  // berpadu lereng MENUKIK (s/d ~0.86), rata-rata ~0.58, tak pernah mendaki.
+  h -= 0.3 * z
+    + 0.2 * (z - Math.sin(z * 0.0038 + 0.9) / 0.0038) // swell raksasa ~1650 m
+    + 0.08 * (z - Math.sin(z * 0.011 + 2.3) / 0.011); // undulasi medium ~570 m
 
   return h;
 }
@@ -108,9 +264,9 @@ export function baseDune(x: number, z: number): number {
  * into the air with matching downhill landing slopes.
  */
 export function moundHeightAt(x: number, z: number): number {
-  const period = 88;
+  const period = 104;
   const seg = Math.floor(z / period);
-  const mz = seg * period + 36 + hash2(seg, 31) * 24;
+  const mz = seg * period + 42 + hash2(seg, 31) * 26;
   const mx = pathX(mz) + (hash2(seg, 73) - 0.5) * 36;
 
   // avoid placing right over a chasm span
@@ -118,15 +274,15 @@ export function moundHeightAt(x: number, z: number): number {
   if (ch && mz > ch.z0 - 28 && mz < ch.z1 + 28) return 0;
 
   const dz = z - mz;
-  const hl = 20; // 40m smooth ramp length
+  const hl = 26; // 52m smooth ramp length — long & gentle like a soft mega-mountain swell
   if (Math.abs(dz) > hl) return 0;
 
   const dx = x - mx;
-  const hw = 30; // 60m wide generous ramp
+  const hw = 36; // 72m wide generous ramp
   if (Math.abs(dx) > hw) return 0;
 
   const lat = Math.cos((dx / hw) * (Math.PI * 0.5));
-  const mh = 5.8 + hash2(seg, 19) * 3.4; // 5.8m to 9.2m tall launch mound
+  const mh = 4.6 + hash2(seg, 19) * 2.6; // 4.6m to 7.2m tall soft launch mound
 
   let profile = 0;
   if (dz < 0) {
@@ -157,10 +313,16 @@ export function setRunStart(z: number) {
 }
 
 export function pathX(z: number): number {
-  return 58 * Math.sin(z * 0.0021 + 0.4) + 24 * Math.sin(z * 0.0057 + 2.2);
+  // jalur turun gunung dibuat lebih BERLIKU (tidak lurus membosankan):
+  // tikungan panjang + seda menengah + gelitikan cepat untuk carving hidup
+  return 58 * Math.sin(z * 0.0021 + 0.4) + 30 * Math.sin(z * 0.0072 + 2.2) + 13 * Math.sin(z * 0.016 + 5.1);
 }
 export function pathSlope(z: number): number {
-  return 58 * 0.0021 * Math.cos(z * 0.0021 + 0.4) + 24 * 0.0057 * Math.cos(z * 0.0057 + 2.2);
+  return (
+    58 * 0.0021 * Math.cos(z * 0.0021 + 0.4) +
+    30 * 0.0072 * Math.cos(z * 0.0072 + 2.2) +
+    13 * 0.016 * Math.cos(z * 0.016 + 5.1)
+  );
 }
 export function pathYaw(z: number): number {
   return Math.atan2(pathSlope(z), 1);

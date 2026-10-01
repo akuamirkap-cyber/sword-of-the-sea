@@ -29,6 +29,10 @@ export interface RiderAnim {
   height: number;
   head: number;
   sword: number;
+  /** 0 = humanoid kristal · 1 = SLUGPUP penuh (Rain World): badan siput
+   *  bulat tanpa leher, kepala besar mata hitam, lengan kurus, kaki tebal,
+   *  telinga bulat — morph di-blend mulus. */
+  pup: number;
   // ---- skate tricks
   boardRoll: number;
   boardYaw: number;
@@ -43,6 +47,7 @@ export interface Rider {
   group: THREE.Group;
   tail: THREE.Object3D;
   neck: THREE.Object3D;
+  tailBone: THREE.Object3D; // pangkal punggung — jangkar ekor slugpup
   blade: THREE.Mesh;
   crystal: THREE.MeshPhysicalMaterial;
   crystalU: CrystalUniforms;
@@ -52,6 +57,8 @@ export interface Rider {
   animate: (dt: number, a: RiderAnim) => void;
   impulse: (strength: number) => void;
   setEnv: (tex: THREE.Texture) => void;
+  setBoard: (type: number) => void; // 0 = papan surf Silver Surfer · 1 = pedang
+  setScarfLook: (kind: number, hex: string) => void; // kerah slayer: -1 mati · 0 kain · 1 sulaman · 2 ethereal
 }
 
 // ============================================================ grab poses
@@ -69,6 +76,10 @@ interface Pose {
   front: Hand;
   back: Hand;
   superman?: boolean;
+  /** [kaki depan, kaki belakang]: tarik lutut ke dada 0..1 — inti dari pose
+   *  grab yang AKURAT (indy/melon/method = lutut naik, nose/tail = satu kaki
+   *  lurus ke ujung papan). */
+  legLift?: [number, number];
 }
 
 const POSES: Record<string, Pose> = {
@@ -76,41 +87,49 @@ const POSES: Record<string, Pose> = {
     crouch: 0.95, bend: 0.3, twist: 0.12, yaw: null, head: 0.1,
     off: [0.02, 0.3, 0], rot: [0, 0, 0.12],
     front: { d: [-0.85, 0.45, 0.35] }, back: { at: 'toe' },
+    legLift: [0.35, 0.6],
   },
   melon: {
     crouch: 0.9, bend: 0.28, twist: -0.12, yaw: null, head: 0.05,
     off: [-0.02, 0.28, 0], rot: [0, 0, -0.18],
     front: { at: 'heel' }, back: { d: [0.85, 0.45, -0.25] },
+    legLift: [0.55, 0.3],
   },
   method: {
     crouch: 0.75, bend: -0.3, twist: -0.25, yaw: null, head: -0.25,
     off: [-0.28, 0.46, -0.02], rot: [0.28, 0.15, 0.95],
     front: { at: 'heel' }, back: { d: [0.55, 0.8, -0.25] },
+    legLift: [0.65, 0.85],
   },
   stalefish: {
     crouch: 0.9, bend: 0.2, twist: 0.2, yaw: null, head: 0.1,
     off: [-0.1, 0.3, 0], rot: [0, 0, -0.35],
     front: { d: [-0.75, 0.6, 0.25] }, back: { at: 'heelB' },
+    legLift: [0.3, 0.55],
   },
   nose: {
     crouch: 0.7, bend: 0.35, twist: 0.15, yaw: null, head: 0.1,
     off: [0, 0.22, 0.12], rot: [-0.6, 0, 0],
     front: { at: 'nose' }, back: { d: [0.85, 0.35, -0.35] },
+    legLift: [0, 0.45],
   },
   tail: {
     crouch: 0.75, bend: 0.25, twist: -0.15, yaw: null, head: 0,
     off: [0, 0.26, -0.08], rot: [0.55, 0, 0],
     front: { d: [-0.8, 0.5, 0.4] }, back: { at: 'tail' },
+    legLift: [0.45, 0],
   },
   japan: {
     crouch: 1, bend: 0.45, twist: 0.3, yaw: null, head: 0.15,
     off: [-0.12, 0.42, 0.12], rot: [-0.35, 0, 0.6],
     front: { at: 'toeF' }, back: { d: [0.8, 0.55, -0.35] },
+    legLift: [0.6, 0.55],
   },
   christ: {
     crouch: 0.05, bend: -0.4, twist: 0, yaw: 0.55, head: -0.4,
     off: [0, 0.08, 0], rot: [0, 0, 0],
     front: { d: [-1, 0.2, 0.05] }, back: { d: [1, 0.2, 0.05] },
+    legLift: [0, 0],
   },
   superman: {
     crouch: 0, bend: -0.1, twist: 0, yaw: 0, head: -0.95,
@@ -220,8 +239,8 @@ function limbGeo(L: number, rTop: number, rMid: number, rEnd: number, midAt = 0.
     ],
     24,
     6,
-    0.9,
-    0.9,
+    0.6,
+    0.6,
     5,
   );
   g.rotateX(Math.PI);
@@ -229,15 +248,24 @@ function limbGeo(L: number, rTop: number, rMid: number, rEnd: number, midAt = 0.
 }
 
 function headGeo(): THREE.BufferGeometry {
+  // KEPALA MANUSIA (bukan bola): tengkorak lonjong — lebih tinggi & lebih
+  // dalam dari lebar, rahang menyempit ke dagu, dagu maju, wajah agak rata.
   const g = new THREE.SphereGeometry(0.1, 56, 40);
   const p = g.attributes.position;
   for (let i = 0; i < p.count; i++) {
-    const x = p.getX(i);
+    let x = p.getX(i);
     const y = p.getY(i);
-    const z = p.getZ(i);
-    const t = Math.min(1, Math.max(0, (-y - 0.035) / 0.065));
-    const s = 1 - 0.13 * t * t * (3 - 2 * t);
-    p.setXYZ(i, x * s, y, z * s + 0.012 * t * (z > 0 ? 1 : 0));
+    let z = p.getZ(i);
+    // 0 di tengah kepala → 1 di dagu
+    const t = Math.min(1, Math.max(0, (-y - 0.005) / 0.095));
+    const jaw = 1 - 0.4 * t * t;              // rahang menyempit ke bawah
+    x *= jaw;
+    z = z * (1 - 0.16 * t * t) + 0.014 * t * t; // dagu maju sedikit
+    // proporsi tengkorak: sempit di sisi, tinggi, dalam (z > x)
+    x *= 0.8;
+    z *= 0.94;
+    if (z > 0.02) z *= 0.95; // bidang wajah agak rata
+    p.setXYZ(i, x, y * 1.06, z);
   }
   g.computeVertexNormals();
   return g;
@@ -340,6 +368,29 @@ export function buildRider(): Rider {
   tail.position.set(0, 0.03, -1.35);
   sword.add(tail);
 
+  // ---- PAPAN SURF Silver Surfer: elipsoid krom panjang — hidung & ekor
+  // membulat, dek pipih, memakai logam yang sama dengan pedang (krom).
+  // Anak dari grup pedang → semua flip/pivot/scaling trik tetap bekerja.
+  const surf = (() => {
+    const g = new THREE.SphereGeometry(1, 40, 26);
+    g.scale(0.31, 0.052, 1.72); // panjang 3,44 m, dek pipih ala papan surf
+    g.translate(0, 0.045, 0.38);
+    const m = new THREE.Mesh(g, steel);
+    m.visible = false;
+    sword.add(m);
+    return m;
+  })();
+
+  /** papan seluncur: 0 = papan surf Silver Surfer · 1 = pedang skate */
+  function setBoard(type: number) {
+    const board = Math.round(type) % 2 === 0;
+    surf.visible = board;
+    blade.visible = !board;
+    guard.visible = !board;
+    grip.visible = !board;
+    pommel.visible = !board;
+  }
+
   // ---------------------------------------------------------------- body parts
   const body = new THREE.Group();
   group.add(body);
@@ -354,8 +405,8 @@ export function buildRider(): Rider {
       [
         { y: -0.1, w: 0.1, d: 0.075 },
         { y: -0.05, w: 0.14, d: 0.1 },
-        { y: 0.02, w: 0.15, d: 0.105 },
-        { y: 0.08, w: 0.135, d: 0.095 },
+        { y: 0.02, w: 0.148, d: 0.102 },
+        { y: 0.09, w: 0.122, d: 0.088 }, // nyambung ke pinggang torso
       ],
       32,
       6,
@@ -367,13 +418,13 @@ export function buildRider(): Rider {
     loft(
       [
         { y: 0.0, w: 0.118, d: 0.085 },
-        { y: 0.08, w: 0.114, d: 0.084, z: 0.004 },
-        { y: 0.18, w: 0.135, d: 0.098, z: 0.012 },
-        { y: 0.28, w: 0.155, d: 0.108, z: 0.018 },
-        { y: 0.36, w: 0.168, d: 0.1, z: 0.012 },
-        { y: 0.42, w: 0.162, d: 0.085, z: 0.0 },
-        { y: 0.46, w: 0.12, d: 0.07 },
-        { y: 0.49, w: 0.062, d: 0.055 },
+        { y: 0.08, w: 0.116, d: 0.086, z: 0.004 },
+        { y: 0.18, w: 0.14, d: 0.1, z: 0.012 },
+        { y: 0.28, w: 0.162, d: 0.11, z: 0.018 },  // dada lebar
+        { y: 0.36, w: 0.172, d: 0.102, z: 0.012 },
+        { y: 0.43, w: 0.15, d: 0.088, z: 0.006 },  // bahu
+        { y: 0.475, w: 0.1, d: 0.072, z: 0.0 },    // trapezius
+        { y: 0.52, w: 0.06, d: 0.056 },            // pangkal leher (menyatu)
       ],
       36,
       6,
@@ -384,9 +435,9 @@ export function buildRider(): Rider {
   const neckMesh = mk(
     loft(
       [
-        { y: 0, w: 0.048, d: 0.046 },
-        { y: 0.06, w: 0.042, d: 0.042 },
-        { y: 0.12, w: 0.044, d: 0.044 },
+        { y: 0, w: 0.06, d: 0.056 },   // pangkal lebar — melebur ke trapezius
+        { y: 0.06, w: 0.043, d: 0.042 },
+        { y: 0.12, w: 0.052, d: 0.05 }, // melebar lagi mendekati tengkorak
       ],
       24,
       5,
@@ -395,25 +446,76 @@ export function buildRider(): Rider {
     ),
   );
   const head = mk(headGeo());
-  const tailGeo = loft(
-    [
-      { y: 0, w: 0.03, d: 0.034 },
-      { y: 0.08, w: 0.036, d: 0.04, z: -0.012 },
-      { y: 0.2, w: 0.03, d: 0.034, z: -0.02 },
-      { y: 0.34, w: 0.02, d: 0.024, z: -0.012 },
-      { y: 0.46, w: 0.008, d: 0.01, z: 0.004 },
-    ],
-    20,
-    6,
-    0.6,
-    1,
-  );
-  tailGeo.rotateX(Math.PI);
-  const ponytail = mk(tailGeo);
-  const circlet = mk(new THREE.TorusGeometry(0.083, 0.0065, 10, 64), gold);
 
+  // ---- KERAH SLAYER: kain tebal yang MEMBELIT leher — dua lilitan
+  // menyilang & menumpuk (torus miring) + ujung kain ditusukkan di depan.
+  // Rapat di leher tanpa celah, terbaca sebagai syal dari sudut mana pun.
+  // Anak neckMesh → mengikuti lekuk leher, swing superman & skala pup.
+  const scarfCollar = (() => {
+    const g = new THREE.Group();
+    const bandMat = new THREE.MeshStandardMaterial({
+      color: 0xc42f3a,
+      roughness: 0.82,
+      metalness: 0,
+      side: THREE.DoubleSide,
+      emissive: new THREE.Color(0x1c0604),
+      emissiveIntensity: 0.35,
+    });
+    // lilitan kain: torus tabung tebal, dimiringkan agar dua lilitan
+    // tampak menyilang menumpuk (bukan cincin sejajar yang kaku)
+    const mkCoil = (r: number, tube: number, rz: number, rx: number, y: number) => {
+      const m = new THREE.Mesh(new THREE.TorusGeometry(r, tube, 14, 44), bandMat);
+      m.rotation.set(Math.PI / 2 + rx, 0, rz);
+      m.position.y = y;
+      return m;
+    };
+    const coil1 = mkCoil(0.0645, 0.0225, 0.2, 0.06, 0.008); // lilitan bawah
+    const coil2 = mkCoil(0.066, 0.02, -0.24, -0.05, 0.034); // lilitan atas, silang
+    // ujung kain ditusukkan: lidah kain diagonal menimpa lilitan di depan
+    const flap = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.016, 0.088), bandMat);
+    flap.position.set(0.014, 0.018, 0.058);
+    flap.rotation.set(0.2, -0.4, 0.55);
+    // trim emas mengelilingi bibir atas & bawah lilitan (mode sulaman)
+    const trimGeo = new THREE.TorusGeometry(0.0625, 0.0034, 8, 40);
+    const trimT = new THREE.Mesh(trimGeo, gold);
+    const trimB = new THREE.Mesh(trimGeo, gold);
+    trimT.rotation.x = Math.PI / 2;
+    trimB.rotation.x = Math.PI / 2;
+    trimT.position.y = 0.058;
+    trimB.position.y = -0.016;
+    trimT.visible = false;
+    trimB.visible = false;
+    g.add(coil1, coil2, flap, trimT, trimB);
+    g.position.y = 0.05;
+    g.visible = false;
+    neckMesh.add(g);
+    return { group: g, bandMat, trimT, trimB };
+  })();
+
+  /** tampilan kerah mengikuti mode slayer: 0 kain warna · 1 sulaman journey · 2 ethereal */
+  function setScarfLook(kind: number, hex: string) {
+    const on = kind >= 0;
+    scarfCollar.group.visible = on;
+    if (!on) return;
+    const c = new THREE.Color(hex);
+    if (kind === 2) {
+      // ethereal: kain cahaya — emissive kuat dari warna inti palette
+      scarfCollar.bandMat.color.copy(c).multiplyScalar(0.35);
+      scarfCollar.bandMat.emissive.copy(c);
+      scarfCollar.bandMat.emissiveIntensity = 1.1;
+      scarfCollar.trimT.visible = false;
+      scarfCollar.trimB.visible = false;
+    } else {
+      // kain biasa / sulaman journey: warna kain, trim emas hanya di sulaman
+      scarfCollar.bandMat.color.copy(kind === 1 ? new THREE.Color(0x9c2313) : c);
+      scarfCollar.bandMat.emissive.set(kind === 1 ? 0x2a0a06 : 0x1c0604);
+      scarfCollar.bandMat.emissiveIntensity = 0.35;
+      scarfCollar.trimT.visible = kind === 1;
+      scarfCollar.trimB.visible = kind === 1;
+    }
+  }
   const deltGeo = new THREE.SphereGeometry(0.056, 28, 20);
-  deltGeo.scale(1.05, 0.95, 0.95);
+  deltGeo.scale(1.02, 0.86, 0.98); // otot bahu pipih, menyatu dada
   const deltL = mk(deltGeo);
   const deltR = mk(deltGeo);
 
@@ -443,9 +545,6 @@ export function buildRider(): Rider {
   const jointGeo = new THREE.SphereGeometry(1, 20, 14);
   const elbowL = mk(jointGeo);
   const elbowR = mk(jointGeo);
-  const cuffGeo = new THREE.TorusGeometry(0.029, 0.0055, 8, 40);
-  const cuffL = mk(cuffGeo, gold);
-  const cuffR = mk(cuffGeo, gold);
 
   const TH = 0.45;
   const SH = 0.44;
@@ -457,9 +556,6 @@ export function buildRider(): Rider {
   const shinR = mk(shinGeo);
   const kneeL = mk(jointGeo);
   const kneeR = mk(jointGeo);
-  const ankleGeo = new THREE.TorusGeometry(0.034, 0.006, 8, 40);
-  const ankL = mk(ankleGeo, gold);
-  const ankR = mk(ankleGeo, gold);
   const footGeo = loft(
     [
       { y: -0.06, w: 0.03, d: 0.03 },
@@ -476,11 +572,56 @@ export function buildRider(): Rider {
   footGeo.translate(0, -0.055, 0);
   const footL = mk(footGeo);
   const footR = mk(footGeo);
-  const belt = mk(new THREE.TorusGeometry(1, 0.1, 10, 72), gold);
 
   // scarf anchor rides with the body (incl. superman)
   const neck = new THREE.Object3D();
   body.add(neck);
+
+  // ---- SLUGPUP (Rain World): mata hitam bulat + telinga bulat + jangkar
+  // ekor panjang tebal di pangkal punggung. Semuanya di-blend lewat a.pup.
+  const eyes = new THREE.Group();
+  {
+    const eyeGeo = new THREE.SphereGeometry(0.021, 14, 10);
+    const eyeMat = new THREE.MeshStandardMaterial({
+      color: 0x10131b,
+      roughness: 0.22,
+      metalness: 0.15,
+      emissive: new THREE.Color(0x05070c),
+    });
+    const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+    eyeL.position.set(-0.04, 0.012, 0.088);
+    const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
+    eyeR.position.set(0.04, 0.012, 0.088);
+    eyes.add(eyeL, eyeR);
+    eyes.visible = false;
+    head.add(eyes); // anak kepala → ikut semua gerakan kepala
+  }
+  const ears = new THREE.Group();
+  {
+    const earGeo = new THREE.SphereGeometry(0.034, 16, 12);
+    const earL = new THREE.Mesh(earGeo, crystal);
+    earL.position.set(-0.07, 0.07, -0.012);
+    earL.scale.set(0.85, 1, 0.6);
+    const earR = new THREE.Mesh(earGeo, crystal);
+    earR.position.set(0.07, 0.07, -0.012);
+    earR.scale.set(0.85, 1, 0.6);
+    ears.add(earL, earR);
+    ears.visible = false;
+    head.add(ears);
+  }
+  // moncong kecil khas ferret — tumbuh bersama morph pup
+  const snout = (() => {
+    const g = new THREE.SphereGeometry(0.03, 14, 10);
+    g.scale(0.9, 0.62, 1.25);
+    const m = new THREE.Mesh(g, crystal);
+    m.position.set(0, -0.014, 0.093);
+    m.visible = false;
+    head.add(m);
+    return m;
+  })();
+  const tailBone = new THREE.Object3D();
+  tailBone.position.set(0, -0.05, -0.11);
+  body.add(tailBone);
 
   group.scale.setScalar(1.18);
 
@@ -490,7 +631,6 @@ export function buildRider(): Rider {
   let crouchV = 0;
   let armBlend = 0;
   let tuck = 0;
-  let tailSwing = 1;
   let twist = 0;
   let curPose: string | null = null;
   let poseW = 0;
@@ -543,18 +683,33 @@ export function buildRider(): Rider {
     const k = (r: number) => 1 - Math.exp(-dt * r);
 
     // ---------------- proportions
+    // SLUGPUP MORPH (a.pup 0→1) — proporsi FERRET PUTIH (bukan panda!):
+    // badan PANJANG ramping seperti tabung, kepala KECIL dengan moncong,
+    // leher pendek, mata hitam kecil, kaki pendek ramping, telinga kecil
+    // di sisi — siluet mustelid khas slugcat Rain World.
+    const pup = clamp(a.pup, 0, 1);
     const s = clamp(a.sword, 0.35, 1.3);
     const h = clamp(a.height, 0.4, 1.15);
-    const legK = h;
-    const torsoK = 0.4 + 0.6 * h;
-    const armK = 0.32 + 0.68 * h;
-    const neckK = 0.45 + 0.55 * h;
+    const legK = h * (1 - 0.34 * pup); // kaki pendek khas mustelid
+    const torsoK = (0.4 + 0.6 * h) * (1 + 0.52 * pup); // tulang belakang PANJANG
+    const armK = (0.32 + 0.68 * h) * (1 - 0.16 * pup);
+    const neckK = (0.45 + 0.55 * h) * (1 - 0.5 * pup); // leher pendek tapi ada
     const girth = 1 + (1 - h) * 0.45;
-    const headK = clamp(a.head, 0.6, 2.4);
-    const footK = girth;
+    const headK = clamp(a.head, 0.6, 2.4) * (1 - 0.44 * pup); // kepala KECIL
+    const armGirth = girth * (1 - 0.4 * pup); // langan jarum
+    const legGirth = girth * (1 - 0.12 * pup); // kaki ramping (bukan paha beruang)
+    const footK = girth * (1 - 0.34 * pup); // telapak mungil
     const UAk = UA * armK;
     const FAk = FA * armK;
     const reach = (UAk + FAk) * 0.94;
+
+    // wajah ferret: mata mengecil, telinga mengecil ke sisi, moncong tumbuh
+    eyes.visible = pup > 0.02;
+    eyes.scale.setScalar(1 - 0.34 * pup);
+    ears.visible = pup > 0.02;
+    ears.scale.set(1 - 0.4 * pup, 1 - 0.22 * pup, 1 - 0.4 * pup);
+    snout.visible = pup > 0.02;
+    snout.scale.setScalar(pup);
 
     // ---------------- grab pose crossfade (one style at a time)
     const want = a.pose && POSES[a.pose] ? a.pose : null;
@@ -615,7 +770,6 @@ export function buildRider(): Rider {
     armBlend += ((a.air ? 1 : 0) - armBlend) * k(4);
     tuck += (flipAmt - tuck) * k(7);
     twist += (a.steer * 0.3 - twist) * k(5);
-    tailSwing += (0.9 + a.speed * 0.6 + (a.air ? 0.3 : 0) - tailSwing) * k(3);
     const breathe = Math.sin(a.time * 1.6) * 0.012 * torsoK;
 
     // ---------------- core (body space)
@@ -635,17 +789,15 @@ export function buildRider(): Rider {
 
     pelvis.position.copy(pelvisP);
     pelvis.quaternion.copy(qBody);
-    pelvis.scale.set(1, 0.5 + 0.5 * torsoK, 1);
+    // badan ferret: ramping dari depan, DALAM dari samping (tabung panjang)
+    pelvis.scale.set(1 - 0.1 * pup, 0.5 + 0.5 * torsoK, 1 + 0.14 * pup);
     lb(qBody, pelvisP, 0, 0.07 * torsoK, 0, v);
     torso.position.copy(v);
     torso.quaternion.copy(qSpine);
-    torso.scale.set(1, torsoK, 1);
+    torso.scale.set(1 - 0.1 * pup, torsoK, 1 + 0.26 * pup);
     lb(qSpine, v, 0, 0.36 * torsoK, 0.012, chestP);
     lb(qSpine, v, 0, 0.47 * torsoK, 0, neckBase);
 
-    lb(qBody, pelvisP, 0, 0.075 * torsoK, 0, belt.position);
-    belt.quaternion.copy(qBody).multiply(tmpQ.setFromAxisAngle(xAxis, Math.PI / 2));
-    belt.scale.set(0.126, 0.092, 0.12);
 
     // ---------------- neck & head
     neckMesh.position.copy(neckBase);
@@ -665,17 +817,6 @@ export function buildRider(): Rider {
     head.quaternion.copy(qHead);
     head.scale.setScalar(headK);
     neck.position.copy(neckBase);
-
-    lb(qHead, headC, 0, 0.042 * headK, -0.004 * headK, circlet.position);
-    circlet.quaternion.copy(qHead).multiply(tmpQ.setFromAxisAngle(xAxis, Math.PI / 2 + 0.22));
-    circlet.scale.setScalar(1.12 * headK);
-
-    lb(qHead, headC, 0, 0.055 * headK, -0.086 * headK, ponytail.position);
-    const swing = 0.9 * tailSwing + Math.sin(a.time * 3.1) * 0.12 * (0.5 + a.speed);
-    e.set(swing, Math.sin(a.time * 2.3) * 0.15 * (0.4 + a.speed), 0);
-    tmpQ.setFromEuler(e);
-    ponytail.quaternion.copy(qHead).multiply(tmpQ);
-    ponytail.scale.setScalar(0.4 + 0.6 * headK);
 
     // ---------------- SUPERMAN: the whole body swings out behind the sword
     const sw = P && P.superman ? w : 0;
@@ -699,13 +840,16 @@ export function buildRider(): Rider {
       lb(qBody, pelvisP, side * 0.092, -0.03 * torsoK, 0, hipJ[si]);
       // attached to the (possibly flipping / grabbed) sword
       toBody(toGroup(footLocal[si], tgt));
-      if (a.feetLift > 0.001) {
+      // pose grab akurat: lutut ditarik ke dada sesuai gaya grab
+      const poseLift = P && P.legLift ? P.legLift[si] * w : 0;
+      const lift = clamp(a.feetLift + poseLift, 0, 1);
+      if (lift > 0.001) {
         // popped off: tucked up above where the sword rests
         toBody(alt.copy(footLocal[si]).add(pivot));
-        alt.y += 0.32 * legK;
+        alt.y += (0.26 + 0.3 * lift) * legK * (0.7 + 0.3 * lift);
         alt.z += side < 0 ? 0.04 : -0.06;
         alt.x += 0.05;
-        tgt.lerp(alt, a.feetLift);
+        tgt.lerp(alt, lift);
       }
       if (sw > 0.001) {
         alt.copy(hipJ[si]).add(v.set(side * 0.07, -legLen * 0.97, -0.03));
@@ -716,22 +860,20 @@ export function buildRider(): Rider {
       const th = si === 0 ? thighL : thighR;
       const sh = si === 0 ? shinL : shinR;
       const kn = si === 0 ? kneeL : kneeR;
-      const an = si === 0 ? ankL : ankR;
       const ft = si === 0 ? footL : footR;
-      placeSeg(th, hipJ[si], mid, TH, girth);
-      placeSeg(sh, mid, end, SH, girth);
+      placeSeg(th, hipJ[si], mid, TH, legGirth);
+      placeSeg(sh, mid, end, SH, legGirth);
       kn.position.copy(mid);
-      kn.scale.setScalar(0.05 * girth);
+      kn.scale.setScalar(0.05 * legGirth);
       // feet follow the sword's orientation while attached
       qFootRest.setFromAxisAngle(yAxis, STANCE + (side < 0 ? -0.25 : 0.25));
       qFootAtt.copy(qBodyInv).multiply(qBoard).multiply(qFootRest);
-      ft.quaternion.copy(qFootAtt).slerp(qFootRest, Math.max(a.feetLift, sw));
-      if (a.feetLift > 0.001) ft.quaternion.multiply(tmpQ.setFromAxisAngle(xAxis, a.feetLift * 0.5));
+      ft.quaternion.copy(qFootAtt).slerp(qFootRest, Math.max(lift, sw));
+      if (lift > 0.001) ft.quaternion.multiply(tmpQ.setFromAxisAngle(xAxis, lift * 0.5));
+      // gaya di udara: jari kaki menunjuk (plantar flex) — pose skater yang rapi
+      ft.quaternion.multiply(tmpQ.setFromAxisAngle(xAxis, armBlend * 0.34));
       ft.position.copy(end);
       ft.scale.setScalar(footK);
-      an.position.copy(end).add(v.set(0, -0.02 * footK, 0).applyQuaternion(ft.quaternion));
-      an.quaternion.copy(ft.quaternion).multiply(tmpQ.setFromAxisAngle(xAxis, Math.PI / 2));
-      an.scale.setScalar(footK);
     }
 
     // ---------------- arms: balance → wings → tuck → grab pose
@@ -741,7 +883,7 @@ export function buildRider(): Rider {
       const delt = si === 0 ? deltL : deltR;
       delt.position.copy(shoJ[si]);
       delt.quaternion.copy(qChest);
-      delt.scale.setScalar(girth);
+      delt.scale.setScalar(armGirth);
 
       const carve = a.steer * side;
       if (side < 0) dir.set(-0.62, -0.42 + carve * 0.18, 0.62);
@@ -756,37 +898,48 @@ export function buildRider(): Rider {
       dir.normalize().applyQuaternion(qChest);
       tgt.copy(shoJ[si]).addScaledVector(dir, reach);
 
+      let grabbing = false;
       if (P && w > 0.001) {
         const hand = side < 0 ? P.front : P.back;
         if ('at' in hand) {
           toBody(toGroup(boardPt(hand.at, v2), alt));
+          grabbing = true;
         } else if ('d' in hand) {
           dir2.set(hand.d[0], hand.d[1], hand.d[2]).normalize().applyQuaternion(qChest);
           alt.copy(shoJ[si]).addScaledVector(dir2, reach);
         } else {
           alt.copy(gripStand).add(v2.set(side * 0.13, 0, 0));
+          grabbing = true;
         }
-        tgt.lerp(alt, w);
+        // antisipasi + overshoot kecil: jangkauan sedikit melewati target saat
+        // mencengkeram lalu settle — terasa "menggapai", bukan teleport
+        const reachK = clamp(w + Math.sin(Math.min(1, w) * Math.PI) * 0.1, 0, 1.05);
+        tgt.lerp(alt, reachK);
       }
 
-      pole.set(side * 0.3, -0.6, -0.6).applyQuaternion(qChest);
+      // siku mengarah keluar-bawah relatif terhadap arah jangkauan (bukan vektor
+      // mati) → tidak ada siku "patah" saat tangan turun ke papan
+      pole.set(side * 0.85, -0.45, -0.35).applyQuaternion(qChest);
+      dir2.subVectors(tgt, shoJ[si]).normalize();
+      pole.addScaledVector(dir2, -pole.dot(dir2));
+      if (pole.lengthSq() < 1e-6) pole.set(side, -0.5, 0);
+      pole.normalize();
       ik2(shoJ[si], tgt, UAk, FAk, pole, mid, end);
       const ua = si === 0 ? upperL : upperR;
       const fa = si === 0 ? foreL : foreR;
       const eb = si === 0 ? elbowL : elbowR;
       const hd = si === 0 ? handL : handR;
-      const cf = si === 0 ? cuffL : cuffR;
-      placeSeg(ua, shoJ[si], mid, UA, girth);
-      placeSeg(fa, mid, end, FA, girth);
+      placeSeg(ua, shoJ[si], mid, UA, armGirth);
+      placeSeg(fa, mid, end, FA, armGirth);
       eb.position.copy(mid);
-      eb.scale.setScalar(0.035 * girth);
+      eb.scale.setScalar(0.035 * armGirth);
       _q.copy(fa.quaternion);
       hd.position.copy(end);
-      hd.quaternion.copy(_q).multiply(tmpQ.setFromAxisAngle(xAxis, 0.25));
-      hd.scale.setScalar(girth);
-      cf.position.copy(end).addScaledVector(_d.set(0, 1, 0).applyQuaternion(_q), 0.02 * girth);
-      cf.quaternion.copy(_q).multiply(tmpQ.setFromAxisAngle(xAxis, Math.PI / 2));
-      cf.scale.setScalar(girth);
+      // pergelangan mengikuti lengan bawah; saat mencengkeram papan, telapak
+      // menghadap target (fleksi pergelangan) — grip terlihat meyakinkan
+      hd.quaternion.copy(_q).multiply(tmpQ.setFromAxisAngle(xAxis, grabbing ? 0.55 : 0.25));
+      if (grabbing) hd.quaternion.multiply(tmpQ.setFromAxisAngle(yAxis, -side * 0.28));
+      hd.scale.setScalar(armGirth);
     }
   }
 
@@ -817,6 +970,7 @@ export function buildRider(): Rider {
     height: 1,
     head: 1,
     sword: 0.68,
+    pup: 0,
     boardRoll: 0,
     boardYaw: 0,
     boardPitch: 0,
@@ -826,5 +980,5 @@ export function buildRider(): Rider {
     poseW: 0,
   });
 
-  return { group, tail, neck, blade, crystal, crystalU, gold, steel, goldHilt, animate, impulse, setEnv };
+  return { group, tail, neck, tailBone, blade, crystal, crystalU, gold, steel, goldHilt, animate, impulse, setEnv, setBoard, setScarfLook };
 }

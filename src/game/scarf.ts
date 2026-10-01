@@ -42,6 +42,62 @@ export interface ScarfOpts {
   flutter: number;
 }
 
+function makeEmbroideryMaterial() {
+  const u = {
+    uTime: { value: 0 },
+    uGlow: { value: 1 },
+  };
+  const mat = new THREE.ShaderMaterial({
+    uniforms: u,
+    vertexShader: /* glsl */ `
+      varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+      void main(){
+        vUv = uv;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vV = -mv.xyz;
+        vN = normalMatrix * normal;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: /* glsl */ `
+      uniform float uTime; uniform float uGlow;
+      varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+      float h21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+      void main(){
+        vec2 uv = vUv; // x: lebar pita, y: leher -> ujung
+        vec3 gold = vec3(1.0, 0.78, 0.32);
+        // dasar: merah tua di leher -> oker hangat ke ujung (ala jubah Journey)
+        vec3 base = mix(vec3(0.60, 0.12, 0.08), vec3(0.82, 0.33, 0.13), smoothstep(0.15, 0.95, uv.y));
+        base += (h21(floor(uv * vec2(90.0, 200.0))) - 0.5) * 0.05; // tenunan halus
+        // trim krem di tepi panjang & ujung pita
+        float edge = smoothstep(0.09, 0.045, min(uv.x, 1.0 - uv.x));
+        float hem = smoothstep(0.90, 0.93, uv.y);
+        base = mix(base, vec3(0.93, 0.86, 0.72), clamp(max(edge, hem), 0.0, 1.0));
+        // SULAMAN EMAS: diamond besar & kecil selang-seling + chevron dekat ujung
+        float sym = 0.0;
+        float cell = uv.y * 11.0;
+        float ci = floor(cell);
+        float cu = fract(cell) - 0.5;
+        float d1 = abs(cu) * 0.9 + abs(uv.x - 0.5) * 1.1;
+        sym = max(sym, smoothstep(0.30, 0.20, d1) * step(mod(ci, 2.0), 0.5));
+        float d2 = abs(cu) * 0.9 + abs(uv.x - 0.5) * 1.5;
+        sym = max(sym, smoothstep(0.22, 0.14, d2) * step(0.5, mod(ci, 2.0)));
+        float ch = abs((uv.x - 0.5) * 1.5 + (uv.y - 0.82) * 2.6);
+        sym = max(sym, smoothstep(0.16, 0.09, ch));
+        float pulse = 0.72 + 0.28 * sin(uTime * 1.35 + uv.y * 11.0 + uv.x * 3.1);
+        vec3 emb = gold * sym * uGlow * pulse * 1.9;
+        // pencahayaan dua sisi + fresnel emas di lipatan
+        vec3 N = normalize(vN);
+        if (!gl_FrontFacing) N = -N;
+        float diff = 0.52 + 0.48 * max(dot(N, normalize(vec3(0.35, 0.85, 0.4))), 0.0);
+        float fres = pow(1.0 - abs(dot(N, normalize(vV))), 2.2);
+        vec3 col = base * diff + gold * fres * 0.30 + emb;
+        gl_FragColor = vec4(col, 1.0);
+      }`,
+    side: THREE.DoubleSide,
+  });
+  return { mat, u };
+}
+
 function makeEtherealMaterial() {
   const u = {
     uTime: { value: 0 },
@@ -127,6 +183,9 @@ export class Scarf {
   private clothMat: THREE.MeshStandardMaterial;
   private etherMat: THREE.ShaderMaterial;
   private eu: ReturnType<typeof makeEtherealMaterial>['u'];
+  private embroideryMat: THREE.ShaderMaterial;
+  private ju: ReturnType<typeof makeEmbroideryMaterial>['u'];
+  private embroidered = false;
   private init = false;
   private phase: number;
 
@@ -139,6 +198,8 @@ export class Scarf {
   private acc = new THREE.Vector3();
   private before = new THREE.Vector3();
   private lat = new THREE.Vector3();
+  private wind = new THREE.Vector3();
+  private press = new THREE.Vector3();
   private baseColor = new THREE.Color();
   private tipColor = new THREE.Color();
 
@@ -188,6 +249,9 @@ export class Scarf {
     const em = makeEtherealMaterial();
     this.etherMat = em.mat;
     this.eu = em.u;
+    const gm = makeEmbroideryMaterial();
+    this.embroideryMat = gm.mat;
+    this.ju = gm.u;
 
     this.mesh = new THREE.Mesh(geo, this.clothMat);
     this.mesh.frustumCulled = false;
@@ -204,11 +268,22 @@ export class Scarf {
   /** switch between the cloth and the ethereal skin */
   setSkin(ethereal: boolean, paletteIdx: number) {
     this.ethereal = ethereal;
-    this.mesh.material = ethereal ? this.etherMat : this.clothMat;
+    this.mesh.material = ethereal ? this.etherMat : this.embroidered ? this.embroideryMat : this.clothMat;
     const s = ETHEREAL_SKINS[((paletteIdx % ETHEREAL_SKINS.length) + ETHEREAL_SKINS.length) % ETHEREAL_SKINS.length];
     this.eu.uCore.value.set(s.core);
     this.eu.uEdge.value.set(s.edge);
     this.eu.uHi.value.set(s.hi);
+  }
+
+  /** sulaman emas ala Journey pada skin kain */
+  setEmbroidery(on: boolean) {
+    this.embroidered = on;
+    if (!this.ethereal) this.mesh.material = on ? this.embroideryMat : this.clothMat;
+  }
+
+  /** kekuatan pendar sulaman emas */
+  setGoldGlow(v: number) {
+    this.ju.uGlow.value = v;
   }
 
   /** ethereal glow strength (follows the anti-glare controls) */
@@ -234,18 +309,32 @@ export class Scarf {
     this.init = true;
   }
 
-  update(dt: number, anchor: THREE.Vector3, back: THREE.Vector3, speed: number, time: number, o: ScarfOpts) {
+  update(dt: number, anchor: THREE.Vector3, back: THREE.Vector3, speed: number, time: number, o: ScarfOpts, vel?: THREE.Vector3) {
     const seg = o.length / (N - 1);
     if (!this.init || anchor.distanceTo(this.p[0]) > 25) this.reset(anchor, back, seg);
     this.eu.uTime.value = time + this.phase;
+    this.ju.uTime.value = time + this.phase;
 
     this.p[0].copy(anchor);
     this.prev[0].copy(anchor);
 
     // ethereal silk is lighter: floats more, falls less
     const light = this.ethereal ? 0.55 : 1;
-    const damp = Math.pow(this.ethereal ? 0.915 : 0.9, dt * 60);
-    const flut = o.flutter * (0.35 + Math.min(speed, 90) * 0.015);
+    // redaman lebih tinggi = kain tenang, tidak bergetar per frame
+    const damp = Math.pow(this.ethereal ? 0.93 : 0.925, dt * 60);
+    // ---- AERODINAMIKA: angin sembunyi (apparent wind) = -kecepatan rider.
+    // Kain merasakan hembusan dari arah datangnya gerak — inilah yang membuat
+    // selendang mengekori dengan benar saat ngebut / mengerem / jatuh.
+    this.wind.set(
+      -((vel && vel.x) || back.x * speed),
+      -((vel && vel.y) || 0),
+      -((vel && vel.z) || back.z * speed),
+    );
+    // hembusan ambient lembut (gust dua lapis) supaya kain tetap hidup saat pelan
+    const gustK = Math.sin(time * 0.5 + this.phase) * 0.5 + Math.sin(time * 0.83 + this.phase * 2.1) * 0.5;
+    this.wind.x += back.x * (2.5 + 1.8 * gustK);
+    this.wind.z += back.z * (2.5 + 1.8 * gustK);
+    const flut = o.flutter * (0.25 + Math.min(speed, 90) * 0.011); // lebih lembut dari sebelumnya
     this.lat.set(back.z, 0, -back.x);
     const dt2 = dt * dt;
     const t = time + this.phase;
@@ -254,23 +343,41 @@ export class Scarf {
       const f = i / (N - 1);
       this.v.subVectors(this.p[i], this.prev[i]).multiplyScalar(damp);
       this.prev[i].copy(this.p[i]);
-      this.acc.set(0, -7 * light + Math.min(speed, 80) * 0.06, 0);
-      this.acc.addScaledVector(back, 4 + Math.min(speed, 80) * 0.05);
-      this.acc.addScaledVector(this.lat, Math.sin(t * 7.5 - i * 0.5) * flut * f * 18);
-      this.acc.y += Math.cos(t * 6.0 - i * 0.4) * flut * f * 14;
+      // gravitasi sungguhan (bukan angka ajaib)
+      this.acc.set(0, -9.8 * light, 0);
+      // gaya tekanan aerodinamis HANYA pada komponen angin yang tegak lurus
+      // segmen (model bendera) → kain berkibar natural tanpa gaya dorong manual
+      this.dir.subVectors(this.p[i], this.p[i - 1]);
+      let len = this.dir.length() || 1e-4;
+      this.dir.multiplyScalar(1 / len);
+      this.press.copy(this.wind).addScaledVector(this.dir, -this.wind.dot(this.dir));
+      const pl = this.press.length();
+      if (pl > 0.02) {
+        const k = (0.09 + o.width * 0.35) * Math.pow(Math.min(pl, 40), 1.5) * (0.35 + 0.65 * (1 - f * 0.5));
+        this.acc.addScaledVector(this.press, k / pl);
+      }
+      // turbulensi lembut: sinus tak sinkron + fase berjalan sepanjang pita
+      const fl = flut * f;
+      this.acc.addScaledVector(this.lat, Math.sin(t * 5.3 - i * 0.55 + Math.sin(t * 0.71) * 1.4) * fl * 9);
+      this.acc.y += Math.cos(t * 4.1 - i * 0.4 + Math.sin(t * 0.53)) * fl * 7;
       if (this.ethereal) this.acc.y += Math.sin(t * 1.7 - i * 0.2) * 3 * f; // gentle dreamy lift
       this.p[i].add(this.v).addScaledVector(this.acc, dt2);
     }
 
-    for (let i = 1; i < N; i++) {
-      this.before.copy(this.p[i]);
-      this.dir.subVectors(this.p[i], this.p[i - 1]);
-      const len = this.dir.length() || 1e-4;
-      this.p[i].copy(this.p[i - 1]).addScaledVector(this.dir, seg / len);
-      const gy = duneHeight(this.p[i].x, this.p[i].z) + 0.12;
-      if (this.p[i].y < gy) this.p[i].y = gy;
-      this.before.subVectors(this.p[i], this.before);
-      this.prev[i].add(this.before.multiplyScalar(0.85));
+    // 3 iterasi follow-the-leader → panjang benar-benar konstan walau ngebut
+    for (let iter = 0; iter < 3; iter++) {
+      for (let i = 1; i < N; i++) {
+        this.before.copy(this.p[i]);
+        this.dir.subVectors(this.p[i], this.p[i - 1]);
+        const clen = this.dir.length() || 1e-4;
+        this.p[i].copy(this.p[i - 1]).addScaledVector(this.dir, seg / clen);
+        if (iter === 0) {
+          const gy = duneHeight(this.p[i].x, this.p[i].z) + 0.12;
+          if (this.p[i].y < gy) this.p[i].y = gy;
+        }
+        this.before.subVectors(this.p[i], this.before);
+        this.prev[i].addScaledVector(this.before, iter === 0 ? 0.85 : 0.9);
+      }
     }
 
     this.writeMesh(t, o);
@@ -291,9 +398,11 @@ export class Scarf {
       const tw = Math.sin(t * 4.5 - i * 0.3) * 0.4 * o.flutter * f;
       this.side.copy(this.sideB).multiplyScalar(Math.cos(tw)).addScaledVector(this.bin, Math.sin(tw));
 
-      // Streamlined profile: slender and elegantly tapered without widening in the middle
+      // Streamlined profile: slender and elegantly tapered without widening in the middle.
+      // Dua cincin pertama melebar → pita melebur mulus dari belitan kerah leher.
       const shape = this.ethereal ? (0.85 - 0.3 * f) : (0.9 - 0.35 * f);
-      const w = o.width * (i === 0 ? 0.6 : shape) * 0.5;
+      const root = i === 0 ? 1.05 : i === 1 ? 0.8 : shape;
+      const w = o.width * root * 0.5;
       const k = i * 6;
       const p = this.p[i];
       this.pos[k] = p.x - this.side.x * w;
