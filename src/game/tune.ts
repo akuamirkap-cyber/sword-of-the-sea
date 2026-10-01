@@ -217,8 +217,8 @@ export const DEFAULT_TUNE: Tune = {
   shadow: 1,
   fogTint: 1,
 
-  exposure: 1.0,
-  bloom: 0.30, // Bloom teredam 70% (bebas silau, sejuk dan jernih)
+  exposure: 1.6,
+  bloom: 1.26,
   contrast: 1,
   saturation: 1,
   warmth: 0,
@@ -273,8 +273,8 @@ export const DEFAULT_TUNE: Tune = {
   particles: 1,
   trails: 1,
 
-  // Bloom Data 1 (Teredam 70%)
-  bloomThreshold: 0.78,
+  // Bloom Data 1
+  bloomThreshold: 0.42,
   bloomRadius: 0.65,
   bloomDynamic: 0.08,
   glowFx: 0.18,
@@ -300,7 +300,7 @@ export const DEFAULT_TUNE: Tune = {
   bodyHeight: 1, // proporsi dewasa ala Silver Surfer (chibi masih ada di preset)
   headSize: 1,
   swordSize: 0.68,
-  swordGlow: 0.18, // pencahayaan pedang teredam 70% (sejuk & proporsional)
+  swordGlow: 1.5, // pencahayaan pedang skate terang
 
   aurora: 1, // aktif normal — warna otomatis mengikuti palet langit
   whales: 3,
@@ -359,11 +359,11 @@ export const DEFAULT_TUNE: Tune = {
   climb: 0.85,
   minSpeed: 26,
 
-  // Bloom & Silau teredam 70%
-  glare: 0.45,
-  highlights: 0.65,
-  sunDisc: 0.55,
-  emissive: 0.45,
+  // Pengaturan Silau
+  glare: 0.65,
+  highlights: 0,
+  sunDisc: 1.5,
+  emissive: 1.5,
   motes: 0.5,
 
   customColors: false,
@@ -489,19 +489,20 @@ export const AIR_PRESETS: FeelPreset[] = [
 export const BLOOM_PRESETS: FeelPreset[] = [
   {
     name: 'Data 1',
-    desc: 'bloom teredam 38%, pendar halus & bilah pedang sejuk',
+    desc: 'silau 65%, bloom 126%, pendar pedang & matahari 150%, exposure 160%',
     values: {
       glare: 0.65,
-      highlights: 0.6,
-      sunDisc: 0.65,
-      emissive: 0.55,
+      bloom: 1.26,
+      bloomThreshold: 0.42,
+      highlights: 0,
+      sunDisc: 1.5,
+      emissive: 1.5,
+      swordGlow: 1.5,
+      exposure: 1.6,
       motes: 0.6,
-      bloom: 0.38,
-      bloomThreshold: 0.48,
       bloomRadius: 0.55,
       bloomDynamic: 0.15,
       glowFx: 0.45,
-      swordGlow: 0.22,
     },
   },
   {
@@ -560,19 +561,20 @@ export const BLOOM_PRESETS: FeelPreset[] = [
   },
   {
     name: 'Data 1 (Tinggi)',
-    desc: 'teredam 70%: bebas silau, pendar halus & bilah sejuk',
+    desc: 'silau 65%, bloom 126%, pendar pedang & matahari 150%, exposure 160%',
     values: {
-      glare: 0.45,
-      highlights: 0.65,
-      sunDisc: 0.55,
-      emissive: 0.45,
+      glare: 0.65,
+      highlights: 0,
+      sunDisc: 1.5,
+      emissive: 1.5,
       motes: 0.5,
-      bloom: 0.30,
-      bloomThreshold: 0.78,
+      bloom: 1.26,
+      bloomThreshold: 0.42,
       bloomRadius: 0.65,
       bloomDynamic: 0.08,
       glowFx: 0.25,
-      swordGlow: 0.18,
+      swordGlow: 1.5,
+      exposure: 1.6,
     },
   },
 ];
@@ -590,7 +592,7 @@ export interface MasterPreset {
 export const MASTER_PRESETS: MasterPreset[] = [
   {
     name: 'Twilight Netral (Data 1 Tinggi)',
-    desc: 'Langit Twilight · Cahaya Netral · Bloom Teredam 70% (Bebas Silau, Elegan & Jernih)',
+    desc: 'Langit Twilight · Cahaya Netral · Bloom Data 1 (Silau 65%, Bloom 126%, Pedang & Matahari 150%)',
     paletteName: 'Twilight',
     paletteIndex: 5,
     lightName: 'Netral',
@@ -610,7 +612,7 @@ export const MASTER_PRESETS: MasterPreset[] = [
       terrainLight: 1,
       shadow: 1,
       fogTint: 1,
-      exposure: 1.0,
+      exposure: 1.6,
       contrast: 1,
       saturation: 1,
       warmth: 0,
@@ -620,18 +622,18 @@ export const MASTER_PRESETS: MasterPreset[] = [
       vignette: 0,
       grain: 0.03,
       customColors: false,
-      // Bloom & Cahaya Teredam 70%
-      glare: 0.45,
-      highlights: 0.65,
-      sunDisc: 0.55,
-      emissive: 0.45,
+      // Bloom & Silau sesuai Data 1
+      glare: 0.65,
+      highlights: 0,
+      sunDisc: 1.5,
+      emissive: 1.5,
       motes: 0.5,
-      bloom: 0.30,
-      bloomThreshold: 0.78,
+      bloom: 1.26,
+      bloomThreshold: 0.42,
       bloomRadius: 0.65,
       bloomDynamic: 0.08,
       glowFx: 0.25,
-      swordGlow: 0.18,
+      swordGlow: 1.5,
     },
   },
 ];

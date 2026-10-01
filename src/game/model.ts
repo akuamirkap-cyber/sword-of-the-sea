@@ -84,55 +84,55 @@ interface Pose {
 
 const POSES: Record<string, Pose> = {
   indy: {
-    crouch: 0.95, bend: 0.3, twist: 0.12, yaw: null, head: 0.1,
-    off: [0.02, 0.3, 0], rot: [0, 0, 0.12],
-    front: { d: [-0.85, 0.45, 0.35] }, back: { at: 'toe' },
-    legLift: [0.35, 0.6],
+    crouch: 0.56, bend: 0.08, twist: 0.14, yaw: null, head: -0.04,
+    off: [0.02, 0.30, 0], rot: [0, 0, 0.12],
+    front: { d: [-0.55, 0.42, 0.18] }, back: { at: 'toe' },
+    legLift: [0.42, 0.70],
   },
   melon: {
-    crouch: 0.9, bend: 0.28, twist: -0.12, yaw: null, head: 0.05,
+    crouch: 0.54, bend: 0.06, twist: -0.12, yaw: null, head: -0.04,
     off: [-0.02, 0.28, 0], rot: [0, 0, -0.18],
-    front: { at: 'heel' }, back: { d: [0.85, 0.45, -0.25] },
-    legLift: [0.55, 0.3],
+    front: { at: 'heel' }, back: { d: [0.56, 0.45, -0.18] },
+    legLift: [0.65, 0.42],
   },
   method: {
-    crouch: 0.75, bend: -0.3, twist: -0.25, yaw: null, head: -0.25,
-    off: [-0.28, 0.46, -0.02], rot: [0.28, 0.15, 0.95],
-    front: { at: 'heel' }, back: { d: [0.55, 0.8, -0.25] },
-    legLift: [0.65, 0.85],
+    crouch: 0.50, bend: -0.25, twist: -0.20, yaw: null, head: -0.18,
+    off: [-0.26, 0.45, -0.02], rot: [0.30, 0.16, 0.95],
+    front: { at: 'heel' }, back: { d: [0.44, 0.65, -0.15] },
+    legLift: [0.70, 0.88],
   },
   stalefish: {
-    crouch: 0.9, bend: 0.2, twist: 0.2, yaw: null, head: 0.1,
-    off: [-0.1, 0.3, 0], rot: [0, 0, -0.35],
-    front: { d: [-0.75, 0.6, 0.25] }, back: { at: 'heelB' },
-    legLift: [0.3, 0.55],
+    crouch: 0.56, bend: 0.08, twist: 0.16, yaw: null, head: 0.02,
+    off: [-0.1, 0.30, 0], rot: [0, 0, -0.32],
+    front: { d: [-0.55, 0.45, 0.20] }, back: { at: 'heelB' },
+    legLift: [0.38, 0.65],
   },
   nose: {
-    crouch: 0.7, bend: 0.35, twist: 0.15, yaw: null, head: 0.1,
-    off: [0, 0.22, 0.12], rot: [-0.6, 0, 0],
-    front: { at: 'nose' }, back: { d: [0.85, 0.35, -0.35] },
-    legLift: [0, 0.45],
+    crouch: 0.52, bend: 0.10, twist: 0.12, yaw: null, head: 0,
+    off: [0, 0.24, 0.12], rot: [-0.55, 0, 0],
+    front: { at: 'nose' }, back: { d: [0.58, 0.42, -0.26] },
+    legLift: [0.12, 0.52],
   },
   tail: {
-    crouch: 0.75, bend: 0.25, twist: -0.15, yaw: null, head: 0,
-    off: [0, 0.26, -0.08], rot: [0.55, 0, 0],
-    front: { d: [-0.8, 0.5, 0.4] }, back: { at: 'tail' },
-    legLift: [0.45, 0],
+    crouch: 0.54, bend: 0.08, twist: -0.12, yaw: null, head: 0,
+    off: [0, 0.26, -0.08], rot: [0.52, 0, 0],
+    front: { d: [-0.58, 0.44, 0.26] }, back: { at: 'tail' },
+    legLift: [0.52, 0.12],
   },
   japan: {
-    crouch: 1, bend: 0.45, twist: 0.3, yaw: null, head: 0.15,
-    off: [-0.12, 0.42, 0.12], rot: [-0.35, 0, 0.6],
-    front: { at: 'toeF' }, back: { d: [0.8, 0.55, -0.35] },
-    legLift: [0.6, 0.55],
+    crouch: 0.58, bend: 0.10, twist: 0.22, yaw: null, head: 0.04,
+    off: [-0.14, 0.42, 0.12], rot: [-0.32, 0, 0.60],
+    front: { at: 'toeF' }, back: { d: [0.55, 0.50, -0.22] },
+    legLift: [0.68, 0.55],
   },
   christ: {
-    crouch: 0.05, bend: -0.4, twist: 0, yaw: 0.55, head: -0.4,
+    crouch: 0.04, bend: -0.32, twist: 0, yaw: 0.55, head: -0.32,
     off: [0, 0.08, 0], rot: [0, 0, 0],
-    front: { d: [-1, 0.2, 0.05] }, back: { d: [1, 0.2, 0.05] },
+    front: { d: [-0.85, 0.28, 0.05] }, back: { d: [0.85, 0.28, 0.05] },
     legLift: [0, 0],
   },
   superman: {
-    crouch: 0, bend: -0.1, twist: 0, yaw: 0, head: -0.95,
+    crouch: 0, bend: -0.15, twist: 0, yaw: 0, head: -0.92,
     off: [0, 0.32, 0.3], rot: [-0.12, 0, 0],
     front: { grip: true }, back: { grip: true }, superman: true,
   },
@@ -775,15 +775,21 @@ export function buildRider(): Rider {
     // ---------------- core (body space)
     const stanceYaw = P && P.yaw !== null ? STANCE + (P.yaw - STANCE) * w : STANCE;
     const legLen = (TH + SH) * legK;
-    const hipY = FOOT_Y + legLen * (0.94 - crouch * 0.3) + breathe + a.feetLift * 0.06;
+    // Lutut menyerap getaran medan, tetapi punggung tetap tegak, atletis, dan berwibawa
+    const hipY = FOOT_Y + legLen * (0.94 - crouch * 0.22) + breathe + a.feetLift * 0.06;
     pelvisP.set(0, hipY, 0.05);
     e.set(0, stanceYaw, 0);
     qBody.setFromEuler(e);
-    const bend = 0.12 + crouch * 0.42 + tuck * 0.35 + (P ? P.bend * w : 0);
+
+    // POSTUR ANGGUN & KHARISMATIK:
+    // Punggung tegak, dada diangkat gagah (heroic arch), bebas dari kesan bungkuk kera
+    const bend = 0.02 + crouch * 0.12 + tuck * 0.15 + (P ? P.bend * w : 0);
     const tw = twist + (P ? P.twist * w : 0);
-    e.set(bend, stanceYaw + tw * 0.4, -a.steer * 0.08);
+    e.set(bend, stanceYaw + tw * 0.35, -a.steer * 0.08);
     qSpine.setFromEuler(e);
-    e.set(bend * 0.4, tw * 0.6, 0);
+
+    // Dada terangkat anggun (heroic chest expansion)
+    e.set(-0.04 + bend * 0.15, tw * 0.45, -a.steer * 0.04);
     tmpQ.setFromEuler(e);
     qChest.copy(qSpine).multiply(tmpQ);
 
@@ -799,17 +805,17 @@ export function buildRider(): Rider {
     lb(qSpine, v, 0, 0.47 * torsoK, 0, neckBase);
 
 
-    // ---------------- neck & head
+    // ---------------- neck & head (pandangan mata fokus ke cakrawala dengan percaya diri)
     neckMesh.position.copy(neckBase);
-    e.set(-bend * 0.5 + 0.08, 0, 0);
+    e.set(-bend * 0.3 + 0.04, 0, 0);
     tmpQ.setFromEuler(e);
     neckMesh.quaternion.copy(qChest).multiply(tmpQ);
     neckMesh.scale.set(1, neckK, 1);
     lb(neckMesh.quaternion, neckBase, 0, 0.1 * neckK, 0, neckTop);
     e.set(
-      -0.08 - bend * 0.25 + (a.air ? -0.15 : 0) + (P ? P.head * w : 0),
-      Math.sin(a.time * 0.5) * 0.05 + a.steer * 0.2 + (stanceYaw - STANCE) * 0.6,
-      -a.steer * 0.1,
+      -0.03 - bend * 0.15 + (a.air ? -0.06 : 0) + (P ? P.head * w : 0),
+      Math.sin(a.time * 0.5) * 0.04 + a.steer * 0.18 + (stanceYaw - STANCE) * 0.5,
+      -a.steer * 0.08,
     );
     qHead.setFromEuler(e);
     lb(qHead, neckTop, 0, 0.088 * headK, 0.006 * headK, headC);
@@ -878,25 +884,68 @@ export function buildRider(): Rider {
 
     // ---------------- arms: balance → wings → tuck → grab pose
     for (let si = 0; si < 2; si++) {
-      const side = si === 0 ? -1 : 1; // -1 = front arm
-      lb(qChest, chestP, side * 0.175, 0.06 * torsoK, -0.005, shoJ[si]);
+      const side = si === 0 ? -1 : 1; // -1 = front arm, 1 = back arm
+      lb(qChest, chestP, side * 0.165, 0.05 * torsoK, -0.015, shoJ[si]);
       const delt = si === 0 ? deltL : deltR;
       delt.position.copy(shoJ[si]);
       delt.quaternion.copy(qChest);
       delt.scale.setScalar(armGirth);
 
+      // Jangkauan tangan santai ala skateboarder (luwes, siku tertekuk lembut ~35°-45°, BUKAN lencang depan)
+      const skateReach = (UAk + FAk) * (a.air ? 0.72 + 0.08 * armBlend * (1 - tuck) : 0.66 + 0.06 * a.speed);
+
+      // 1. POSE BERSELANCAR (SKATEBOARD CRUISING & CARVING):
+      // Tangan rileks di sekitar pinggul, luwes mengikuti gerak papan, tidak tegang ke depan.
       const carve = a.steer * side;
-      if (side < 0) dir.set(-0.62, -0.42 + carve * 0.18, 0.62);
-      else dir.set(0.66, -0.5 - carve * 0.15, -0.48);
-      dir.x += Math.sin(a.time * 1.3 + si) * 0.05;
-      dir.y += Math.sin(a.time * 1.1 + si * 2) * 0.05;
-      // wings in the air; during a board flip the arms rise for balance
-      dir2.set(side * 0.95, 0.28 + Math.sin(a.time * 2 + si) * 0.06 + a.feetLift * 0.35, side < 0 ? 0.18 : -0.1);
+      const speedTuck = Math.min(1, a.speed * 0.45 + (a.boost ? 0.22 : 0));
+      if (side < 0) {
+        // Tangan depan: santai di depan-samping pinggul, memimpin belokan dengan luwes
+        dir.set(
+          -0.38 - speedTuck * 0.05 + a.steer * 0.14,
+          -0.58 + carve * 0.16 - speedTuck * 0.06,
+          0.26 - speedTuck * 0.08 + a.steer * 0.10,
+        );
+      } else {
+        // Tangan belakang: penyeimbang santai di belakang-samping pinggul, rileks melayang
+        dir.set(
+          0.44 - speedTuck * 0.08 - a.steer * 0.12,
+          -0.52 - carve * 0.14 - speedTuck * 0.06,
+          -0.22 - speedTuck * 0.10,
+        );
+      }
+      // Irama bernapas & ayunan fluida (luwes, hidup, dinamis)
+      dir.x += Math.sin(a.time * 1.8 + si * 1.6) * 0.025;
+      dir.y += Math.cos(a.time * 1.6 + si * 1.3) * 0.025;
+      dir.z += Math.sin(a.time * 2.0 + si * 2.0) * 0.020;
+
+      // 2. FREESTYLE & UDARA (SKATE AIR / OLLIE BALANCE):
+      // Saat melompat di udara, tangan mengapung santai setinggi dada bawah / pinggang untuk menjaga keseimbangan
+      // (luwes dan lentur seperti skater melayang di udara, bukan kaku)
+      if (side < 0) {
+        dir2.set(
+          -0.48 + Math.sin(a.time * 2.0) * 0.03,
+          0.12 + Math.cos(a.time * 2.0) * 0.03 + a.feetLift * 0.15,
+          0.18,
+        );
+      } else {
+        dir2.set(
+          0.54 + Math.cos(a.time * 2.0) * 0.03,
+          0.18 + Math.sin(a.time * 2.0) * 0.03 + a.feetLift * 0.15,
+          -0.16,
+        );
+      }
       dir.lerp(dir2, armBlend * (1 - tuck));
-      dir2.set(side * 0.25, -0.8, 0.55);
+
+      // 3. FLIP & ROTASI (TUCK AKROBATIK RINGAN):
+      // Tangan ditarik lembut lebih dekat ke tubuh saat berputar
+      if (side < 0) {
+        dir2.set(-0.28, -0.18, 0.15);
+      } else {
+        dir2.set(0.32, -0.08, -0.10);
+      }
       dir.lerp(dir2, tuck);
       dir.normalize().applyQuaternion(qChest);
-      tgt.copy(shoJ[si]).addScaledVector(dir, reach);
+      tgt.copy(shoJ[si]).addScaledVector(dir, skateReach);
 
       let grabbing = false;
       if (P && w > 0.001) {
@@ -911,18 +960,20 @@ export function buildRider(): Rider {
           alt.copy(gripStand).add(v2.set(side * 0.13, 0, 0));
           grabbing = true;
         }
-        // antisipasi + overshoot kecil: jangkauan sedikit melewati target saat
-        // mencengkeram lalu settle — terasa "menggapai", bukan teleport
-        const reachK = clamp(w + Math.sin(Math.min(1, w) * Math.PI) * 0.1, 0, 1.05);
+        // antisipasi + overshoot kecil: terasa menggapai secara alami
+        const reachK = clamp(w + Math.sin(Math.min(1, w) * Math.PI) * 0.08, 0, 1.05);
         tgt.lerp(alt, reachK);
       }
 
-      // siku mengarah keluar-bawah relatif terhadap arah jangkauan (bukan vektor
-      // mati) → tidak ada siku "patah" saat tangan turun ke papan
-      pole.set(side * 0.85, -0.45, -0.35).applyQuaternion(qChest);
+      // Siku menggantung alami ke bawah-belakang (tekukan lembut, luwes, bebas kaku)
+      const poleX = side * 0.32;
+      const poleY = a.air ? -0.52 : -0.76;
+      const poleZ = a.air ? -0.46 : -0.34;
+      pole.set(poleX, poleY, poleZ).applyQuaternion(qChest);
+
       dir2.subVectors(tgt, shoJ[si]).normalize();
       pole.addScaledVector(dir2, -pole.dot(dir2));
-      if (pole.lengthSq() < 1e-6) pole.set(side, -0.5, 0);
+      if (pole.lengthSq() < 1e-6) pole.set(side * 0.3, -0.7, -0.3);
       pole.normalize();
       ik2(shoJ[si], tgt, UAk, FAk, pole, mid, end);
       const ua = si === 0 ? upperL : upperR;
@@ -935,10 +986,13 @@ export function buildRider(): Rider {
       eb.scale.setScalar(0.035 * armGirth);
       _q.copy(fa.quaternion);
       hd.position.copy(end);
-      // pergelangan mengikuti lengan bawah; saat mencengkeram papan, telapak
-      // menghadap target (fleksi pergelangan) — grip terlihat meyakinkan
-      hd.quaternion.copy(_q).multiply(tmpQ.setFromAxisAngle(xAxis, grabbing ? 0.55 : 0.25));
-      if (grabbing) hd.quaternion.multiply(tmpQ.setFromAxisAngle(yAxis, -side * 0.28));
+
+      // Pergelangan & telapak tangan: santai & luwes (skater hand drape), rileks mengikuti gravitasi
+      const wristPitch = grabbing ? 0.55 : (a.air ? 0.02 : 0.16);
+      const wristYaw = grabbing ? -side * 0.28 : (side < 0 ? -0.05 : 0.06);
+      hd.quaternion.copy(_q)
+        .multiply(tmpQ.setFromAxisAngle(xAxis, wristPitch))
+        .multiply(tmpQ.setFromAxisAngle(yAxis, wristYaw));
       hd.scale.setScalar(armGirth);
     }
   }
